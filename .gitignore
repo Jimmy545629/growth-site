@@ -17,3 +17,6 @@ Desktop.ini
 # 环境变量（万一以后要用到，绝不提交）
 .env
 .env.local
+
+# WorkBuddy 的项目记忆 / 临时工具（跟老项目一样，不上传）
+.workbuddy/

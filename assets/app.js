@@ -68,18 +68,41 @@
   /* ============================================================
      二、三张统计卡
      ============================================================ */
+
+  /* 「今天完成了几个行动」这件事只允许有一个来源：数 actions。
+     以前统计卡那份数值是 data.js 里另外写死的，在下面勾了框它纹丝不动，
+     于是同一屏里出现「行动卡 3 / 3」和「统计卡 2 / 3」两个相反的说法。 */
+  function countDone() {
+    return D.actions.filter(function (a) { return a.done; }).length;
+  }
+
+  /* 把 actions 的完成情况翻译成统计卡需要的那三段文字 */
+  function actionStat() {
+    var total = D.actions.length;
+    var left = D.actions.filter(function (a) { return !a.done; });
+    return {
+      value: String(total - left.length),
+      unit: '/ ' + total,
+      note: left.length === 0
+        ? '三项都做完了，保持住'
+        : '还差「' + left.map(function (a) { return a.text; }).join('、') + '」'
+    };
+  }
+
   function renderStats() {
     var box = document.getElementById('stats');
     clear(box);
     var accents = ['var(--brand)', 'var(--warm)', 'var(--ok)'];
 
     D.stats.forEach(function (s, i) {
+      /* 标了 from:'actions' 的那一张，用现算的值，而不是 data.js 里写的 */
+      var v = s.from === 'actions' ? actionStat() : s;
       var card = h('article', { class: 'stat', style: { '--accent': accents[i % accents.length] } });
       add(card, h('p', { class: 'stat-label', text: s.label }));
       add(card, h('p', { class: 'stat-value' },
-        s.value,
-        h('small', { text: ' ' + s.unit })));
-      add(card, h('p', { class: 'stat-note', text: s.note }));
+        v.value,
+        h('small', { text: ' ' + v.unit })));
+      add(card, h('p', { class: 'stat-note', text: v.note }));
       add(box, card);
     });
   }
@@ -179,6 +202,7 @@
       function toggle() {
         D.actions[i].done = !D.actions[i].done;
         renderActions();
+        renderStats();   /* 上面那张「今日行动」统计卡跟着一起变，两处永远说同一个数 */
       }
       li.addEventListener('click', toggle);
       li.addEventListener('keydown', function (e) {
@@ -190,7 +214,7 @@
 
     add(box, ul);
 
-    var done = D.actions.filter(function (a) { return a.done; }).length;
+    var done = countDone();   /* 同一个数只有这一处算法，跟统计卡共用 */
     add(box, h('p', { class: 'action-progress' },
       '今天已完成 ', h('b', { text: done + ' / ' + D.actions.length }),
       done === D.actions.length ? ' —— 全部完成，明天见。' : ' —— 别断在这儿。'));
