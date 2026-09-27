@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>大学生成长网站</title>
+  <meta name="description" content="每天 10 分钟，把认知变成行动。精选认知语录 + 名人访谈 + 政策风口简报。">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+  <div class="wrap">
+
+    <!-- ============ 顶栏 ============ -->
+    <header class="topbar">
+      <div class="brand">
+        <!-- 图标：一本打开的书 + 向上的箭头，纯手写矢量，不引任何图标库 -->
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+               stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10v16H5.5A1.5 1.5 0 0 1 4 18.5z"/>
+            <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14v16h4.5A1.5 1.5 0 0 0 20 18.5z"/>
+            <path d="M18 9.5l2-2 2 2"/>
+          </svg>
+        </span>
+        <div>
+          <h1 class="brand-name">大学生成长网站</h1>
+          <p class="brand-sub">把好内容，变成行动</p>
+        </div>
+      </div>
+
+      <div class="streak">
+        已连续自律 <b id="streak-days">–</b> 天
+      </div>
+    </header>
+
+    <!-- ============ 元信息行 ============ -->
+    <div class="meta-row" id="meta-row"></div>
+
+    <!-- ============ 三张统计卡 ============ -->
+    <section class="stats" id="stats" aria-label="今日概览"></section>
+
+    <!-- ============ 大标题 ============ -->
+    <section class="lead">
+      <h2 class="lead-title">今天，该想明白什么？</h2>
+      <p class="lead-sub">一句话提升认知，三件事落到行动，外加一份政策与风口简报。</p>
+    </section>
+
+    <!-- ============ 首屏：左语录 + 右打卡 ============ -->
+    <section class="hero">
+      <article class="quote-card" id="quote-card" aria-label="今日认知语录"></article>
+      <aside class="action-card" id="action-card" aria-label="今日自律行动"></aside>
+    </section>
+
+    <!-- ============ 三列榜单 ============ -->
+    <section class="columns" id="columns" aria-label="精选内容"></section>
+
+    <!-- ============ 底部 ============ -->
+    <footer class="foot" id="foot"></footer>
+
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
