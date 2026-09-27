@@ -17,8 +17,10 @@
 
   /* 存不住的时候（浏览器禁用存储 / 隐私模式 / 空间满了），
      退回在这块内存里放着 —— 页面照样能点，只是关掉就没了。
-     留着这个兜底，是为了不让「打卡」整个功能直接崩掉。 */
+     留着这个兜底，是为了不让「打卡」整个功能直接崩掉。
+     打卡和收藏各有一块，互不干扰。 */
   var memoryData = null;
+  var memoryFav = null;
 
   var probed = false;      /* 有没有试过 localStorage 能不能用 */
   var usable = false;      /* 试的结果 */
@@ -44,6 +46,10 @@
 
   function blank() {
     return { version: C.schemaVersion, days: {} };
+  }
+
+  function blankFav() {
+    return { version: C.favSchemaVersion, ids: [] };
   }
 
   /* ---------- 读 ---------- */
@@ -91,6 +97,39 @@
     }
   }
 
+  /* ---------- 收藏：另一只抽屉（Day 12 加） ----------
+     结构和打卡一样：读坏了、版本对不上、存不住，一律按「空」处理，
+     绝不让它把整个页面搞报错。 */
+
+  function readFav() {
+    var s = storage();
+    if (!s) return memoryFav || (memoryFav = blankFav());
+
+    var raw = null;
+    try { raw = s.getItem(C.favKey); } catch (e) { return blankFav(); }
+    if (!raw) return blankFav();
+
+    var data = null;
+    try { data = JSON.parse(raw); } catch (e) { return blankFav(); }
+
+    if (!data || typeof data !== 'object') return blankFav();
+    if (data.version !== C.favSchemaVersion) return blankFav();
+    /* ids 用 rules.js 那个清洗函数过一遍：去掉重复和非字符串 */
+    return { version: C.favSchemaVersion, ids: R.cleanIds(data.ids) };
+  }
+
+  function writeFav(data) {
+    var s = storage();
+    if (!s) { memoryFav = data; return false; }
+    try {
+      s.setItem(C.favKey, JSON.stringify(data));
+      return true;
+    } catch (e) {
+      memoryFav = data;
+      return false;
+    }
+  }
+
   /* ---------- 对外 ---------- */
   window.GROWTH_STORE = {
 
@@ -127,11 +166,36 @@
     /* 全部记录，形如 { '2026-09-27': ['read', 'sport'] } */
     allDays: function () { return readAll().days; },
 
+    /* ---------- 收藏（Day 12 加） ---------- */
+
+    /* 收藏的语录 id 数组。顺序 = 收藏的先后顺序。
+       ⚠️ 存的是 id 不是「第几条」—— 跟打卡同一个道理：
+       以后改语录内容、调顺序、删掉一条，以前的收藏都不会错位。 */
+    getFavorites: function () { return readFav().ids; },
+
+    hasFavorite: function (id) { return readFav().ids.indexOf(id) >= 0; },
+
+    countFavorites: function () { return readFav().ids.length; },
+
+    /* 点一下：收藏 / 取消收藏。返回「操作完是不是收藏状态」 */
+    toggleFavorite: function (id) {
+      var ids = readFav().ids.slice();
+      var at = ids.indexOf(id);
+      if (at >= 0) ids.splice(at, 1);
+      else ids.push(id);
+      writeFav({ version: C.favSchemaVersion, ids: R.cleanIds(ids) });
+      return at < 0;
+    },
+
     /* 清空全部记录。界面上没有入口，只给验证脚本用。 */
     clearAll: function () {
       var s = storage();
-      if (s) { try { s.removeItem(C.storeKey); } catch (e) {} }
+      if (s) {
+        try { s.removeItem(C.storeKey); } catch (e) {}
+        try { s.removeItem(C.favKey); } catch (e) {}
+      }
       memoryData = null;
+      memoryFav = null;
     }
 
   };

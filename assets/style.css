@@ -311,6 +311,58 @@ body {
 
 .quote-acts { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 
+/* 已经收藏的那颗按钮：切成暖橙色，跟「今日行动」用同一个强调色 */
+.btn.is-on {
+  background: rgba(255, 179, 71, 0.16);
+  border-color: rgba(255, 179, 71, 0.48);
+  color: #ffd9a3;
+}
+.btn.is-on:hover { background: rgba(255, 179, 71, 0.24); }
+
+/* ---------- 语录卡里的「我的收藏」（Day 12 加） ---------- */
+.favs {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line-soft);
+}
+.favs-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.favs-title { font-size: var(--fs-4); font-weight: 600; color: var(--ink-soft); }
+.favs-count { font-size: var(--fs-4); color: var(--ink-faint); }
+
+.favs-list { list-style: none; margin: 0; padding: 0; }
+
+.fav-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-height: 32px;                      /* 可点元素下限 32×32 */
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 179, 71, 0.07);
+  cursor: pointer;
+}
+.fav-item:last-child { margin-bottom: 0; }
+.fav-item:hover { border-color: rgba(255, 179, 71, 0.38); }
+
+.fav-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-4);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fav-from { flex: none; font-size: var(--fs-4); color: var(--warm); }
+
 /* 右：今日行动卡 */
 .action-card {
   padding: var(--sp-5);
@@ -547,6 +599,8 @@ body {
 }
 .foot p { margin: 0 0 var(--sp-2); }
 .foot strong { color: var(--ink-soft); }
+/* 「计划收录来源」单独一行，用暖橙色标出来，避免被当成「已引用的来源」 */
+.foot-plan { color: var(--warm); }
 
 /* ---------- 窄屏 ---------- */
 @media (max-width: 960px) {

@@ -155,10 +155,17 @@
   }
 
   /* ============================================================
-     三、今日语录卡（可以「换一句」）
+     三、今日语录卡（可以「换一句」，也可以「收藏」）
      ============================================================ */
   var quoteIndex = 0;
-  var quoteSaved = {};
+
+  /* 按 id 找一条语录。找不到返回 null。 */
+  function quoteById(id) {
+    for (var i = 0; i < D.quotes.length; i++) {
+      if (D.quotes[i].id === id) return D.quotes[i];
+    }
+    return null;
+  }
 
   function renderQuote() {
     var box = document.getElementById('quote-card');
@@ -192,12 +199,18 @@
       renderQuote();
     });
 
+    /* 收藏按钮。状态**从存储里读**，不是从这个变量记 ——
+       Day 12 之前这里是个纯内存的对象（quoteSaved），刷新就没了，
+       按钮还会骗人（看着是「已收藏」，其实什么都没存）。 */
+    var saved = S.hasFavorite(q.id);
     var btnSave = h('button', {
-      class: 'btn', type: 'button', id: 'btn-save',
-      text: quoteSaved[quoteIndex] ? '已收藏' : '收藏'
+      class: 'btn' + (saved ? ' is-on' : ''), type: 'button', id: 'btn-save',
+      text: saved ? '已收藏' : '收藏',
+      'aria-pressed': saved ? 'true' : 'false'
     });
     btnSave.addEventListener('click', function () {
-      quoteSaved[quoteIndex] = !quoteSaved[quoteIndex];
+      /* 先写进存储，再重画 —— 顺序反了就会「屏幕上变了、其实没存住」 */
+      S.toggleFavorite(q.id);
       renderQuote();
     });
 
@@ -211,6 +224,51 @@
     add(acts, btnSave);
     add(acts, btnShare);
     add(box, acts);
+
+    /* 收藏列表。一条都没有时这个函数返回 null，add() 会直接跳过 —— 
+       所以没收藏的时候，卡片跟以前长得一模一样，不会多出空壳子。 */
+    add(box, renderFavorites());
+  }
+
+  /* 「我的收藏」：只读列表，点一条就跳到那一条。
+     Day 12 之前收藏只存在内存里，刷新就没了，而且存的是「第几条」——
+     改了语录顺序，收藏的就会跳到别的句子上去。现在两样都改了。 */
+  function renderFavorites() {
+    var ids = S.getFavorites();
+    if (!ids.length) return null;
+
+    var items = [];
+    ids.forEach(function (id) {
+      var q = quoteById(id);
+      if (q) items.push(q);   /* 记录里留着已删掉的 id：跳过，不画出来 */
+    });
+    if (!items.length) return null;
+
+    var wrap = h('div', { class: 'favs' });
+    add(wrap, h('div', { class: 'favs-head' },
+      h('span', { class: 'favs-title', text: '我的收藏' }),
+      h('span', { class: 'favs-count', text: items.length + ' 条 · 点一条跳过去' })));
+
+    var row = h('ul', { class: 'favs-list' });
+    items.forEach(function (q) {
+      var li = h('li', { class: 'fav-item', role: 'button', tabindex: '0',
+        title: q.text + ' —— ' + q.author });
+      add(li, h('span', { class: 'fav-text', text: q.text }));
+      add(li, h('span', { class: 'fav-from', text: '— ' + q.author }));
+
+      function go() {
+        var at = D.quotes.indexOf(q);
+        if (at >= 0) { quoteIndex = at; renderQuote(); }
+      }
+      li.addEventListener('click', go);
+      li.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+      });
+      add(row, li);
+    });
+    add(wrap, row);
+
+    return wrap;
   }
 
   /* 按标签词给个颜色（不是白名单强约束，先做一版看的） */
@@ -395,6 +453,11 @@
     clear(box);
     add(box, h('p', {}, h('strong', { text: '关于这份内容：' }), D.footer.note));
     add(box, h('p', {}, h('strong', { text: '当前引用来源：' }), D.footer.sources.join('、')));
+    /* 「计划收录」单独一行、单独标出来 —— 不许跟上面那行混在一起，
+       免得看的人以为页面上的内容已经出自这些账号了。 */
+    if (D.footer.plan) {
+      add(box, h('p', { class: 'foot-plan', text: D.footer.plan }));
+    }
     add(box, h('p', { text: D.footer.copyright }));
   }
 
