@@ -373,6 +373,63 @@ body {
   margin-top: 2px;
 }
 
+/* ---------- 打卡记录条（行动卡内部：最近几天的格子） ---------- */
+.history { margin-bottom: var(--sp-4); }
+
+.history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.history-title { font-size: var(--fs-4); color: var(--ink-faint); }
+.history-sum { font-size: var(--fs-4); color: var(--ink-soft); }
+
+/* 列数跟着格子数量走，不写死 7 列：
+   以后想改「显示最近几天」，只改 config.js 里的 historyDays，这里不用动 */
+.history-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--sp-2);
+}
+
+.history-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-soft);
+  background: var(--bg-soft);
+  line-height: 1.25;
+}
+.history-day { font-size: var(--fs-4); color: var(--ink-faint); }
+.history-num { font-size: var(--fs-4); font-weight: 700; color: var(--ink-soft); }
+
+/* 那天完成了一些：绿色浅浅一层 */
+.history-cell.is-part {
+  border-color: rgba(52, 211, 153, .34);
+  background: rgba(52, 211, 153, .12);
+}
+.history-cell.is-part .history-num { color: #7ee5bb; }
+
+/* 那天全做完了：绿色更实 */
+.history-cell.is-full {
+  border-color: rgba(52, 211, 153, .70);
+  background: rgba(52, 211, 153, .26);
+}
+.history-cell.is-full .history-day { color: #a9f0d5; }
+.history-cell.is-full .history-num { color: #d6fff0; }
+
+/* 今天那一格加个蓝圈：一眼看出自己站在哪儿 */
+.history-cell.is-today { box-shadow: 0 0 0 2px rgba(76, 141, 255, .50); }
+
 .action-progress {
   margin-top: auto;
   padding-top: var(--sp-4);

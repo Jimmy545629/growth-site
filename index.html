@@ -29,9 +29,8 @@
         </div>
       </div>
 
-      <div class="streak">
-        已连续自律 <b id="streak-days">–</b> 天
-      </div>
+      <!-- 连续天数由 app.js 从真实打卡记录现算后填进来 -->
+      <div class="streak" id="streak"></div>
     </header>
 
     <!-- ============ 元信息行 ============ -->
@@ -60,7 +59,11 @@
 
   </div>
 
-  <script src="assets/data.js"></script>
-  <script src="assets/app.js"></script>
+  <!-- 加载顺序不能换：后面每个文件一开头就要用前面那个 -->
+  <script src="assets/config.js"></script>  <!-- 所有常量 -->
+  <script src="assets/rules.js"></script>   <!-- 所有「算」的逻辑（纯函数） -->
+  <script src="assets/store.js"></script>   <!-- 所有数据读写（唯一碰 localStorage 的文件） -->
+  <script src="assets/data.js"></script>    <!-- 所有内容 -->
+  <script src="assets/app.js"></script>     <!-- 画到页面上 + 收点击 -->
 </body>
 </html>
