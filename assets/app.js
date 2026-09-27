@@ -284,6 +284,15 @@
   /* ============================================================
      四、今日自律行动卡（可以勾选，勾选会真的存下来）
      ============================================================ */
+
+  /* 打卡的「反馈」靠两个变量（Day 11 补）：
+       justToggled —— 刚被点的那一项的 id。**只给它播「打勾」动效**；
+                      不记这个的话，每次重画整列都会重播一遍动画，
+                      看着像整列一起在闪，反而看不出是"我点的那一下"。
+       notice      —— 点完之后要显示的那句提示。null = 不显示。 */
+  var justToggled = null;
+  var notice = null;
+  var noticeTimer = null;
   function renderActions() {
     var box = document.getElementById('action-card');
     clear(box);
@@ -293,12 +302,16 @@
     add(box, h('h2', { class: 'action-title', text: '今日自律行动' }));
     add(box, h('p', { class: 'action-sub', text: '点一下就算完成。记录只存在你自己的浏览器里，不上传、也不用登录。' }));
 
+    /* 「已记下」提示放在标题下面 —— 位置固定，不跟着列表长短跑 */
+    add(box, renderNotice());
+
     var ul = h('ul', { class: 'action-list' });
 
     D.actions.forEach(function (a) {
       var on = ids.indexOf(a.id) >= 0;
       var li = h('li', {
-        class: 'action-item' + (on ? ' is-done' : ''),
+        /* is-pop 只挂给「刚点的那一项」，动画因此只播一次 */
+        class: 'action-item' + (on ? ' is-done' : '') + (a.id === justToggled ? ' is-pop' : ''),
         role: 'button', tabindex: '0',
         'aria-pressed': on ? 'true' : 'false'
       });
@@ -311,6 +324,22 @@
         /* 先写进记录，再重画 —— 顺序反了就会出现「屏幕上勾上了、
            其实没存住」这种骗人的状态。 */
         S.toggle(todayKey(), a.id);
+
+        /* 这一下点完到底是「勾上」还是「取消」？**以存储里的结果为准**，
+           不看界面上刚才的样子（界面可能是过期的）。 */
+        var on = doneIds().indexOf(a.id) >= 0;
+
+        /* 反馈（Day 11 补）：
+           ① 只给刚点的这一项播动效；
+           ② 明说一句「已记下 / 已取消」并带上今天到几项 ——
+              不用用户自己去数下面那行小字。 */
+        justToggled = a.id;
+        notice = {
+          on: on,
+          text: (on ? '已记下：' : '已取消：') + a.text
+                + ' · 今天 ' + countDone() + ' / ' + total
+        };
+
         renderActions();
         renderStats();    /* 上面那张「今日行动」统计卡跟着一起变，两处永远说同一个数 */
         renderStreak();   /* 今天第一次打卡时，顶部连续天数也要跟着变 */
@@ -332,6 +361,37 @@
     add(box, h('p', { class: 'action-progress' },
       '今天已完成 ', h('b', { text: done + ' / ' + total }),
       done === total ? ' —— 全部完成，明天见。' : ' —— 别断在这儿。'));
+
+    /* 「刚点的那一项」这个标记用完就撤 ——
+       否则以后随便哪次重画，它都会再弹一遍动画。 */
+    justToggled = null;
+  }
+
+  /* 点完打卡后那条提示（Day 11 补）。
+     没点过时 notice 是 null，这里返回 null，add() 会直接跳过 ——
+     所以平时卡片里不会挂着一条空提示。 */
+  function renderNotice() {
+    if (!notice) return null;
+
+    var el = h('p', {
+      class: 'action-notice' + (notice.on ? '' : ' is-off'),
+      /* role=status：读屏软件会把这句话念出来，不用用户自己去界面里找 */
+      role: 'status',
+      text: notice.text
+    });
+
+    /* 停一会儿就淡出，然后整条摘掉 ——
+       只淡出、不摘掉的话，卡片顶上会一直留着一块看不见的空白。
+       先清掉上一次的定时器，免得连续点击时几个定时器互相抢。 */
+    if (noticeTimer) clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(function () {
+      el.classList.add('is-out');
+      noticeTimer = setTimeout(function () {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }, 500);   /* 上面 opacity 过渡是 .45s，多留一点余量 */
+    }, C.noticeMs);
+
+    return el;
   }
 
   /* 最近 N 天的小格子：每格一个方块，颜色越实表示那天完成得越多。

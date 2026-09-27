@@ -395,6 +395,10 @@ body {
   background: var(--bg-soft);
   margin-bottom: var(--sp-2);
   cursor: pointer;
+  /* 状态变化要平滑过一下。原来是从 100% 直接跳到 62%，
+     视觉上像"闪"了一下 —— 看不出这是"我刚点的那一下"造成的。
+     （Day 11 补：交互反馈） */
+  transition: opacity .18s ease, border-color .18s ease, background-color .18s ease;
 }
 .action-item:hover { border-color: rgba(255,255,255,.14); }
 .action-item.is-done { opacity: .62; }
@@ -423,6 +427,53 @@ body {
   font-size: var(--fs-4);
   color: var(--ink-faint);
   margin-top: 2px;
+}
+
+/* ---------- 打卡的「生效反馈」（Day 11 补） ----------
+   清单要求「交互有可感知反馈（动效或提示）」。这里用两层：
+     ① 动效   —— 让「我这一下点到了」有手感
+     ② 提示条 —— 用一句文字明说「已记下」，不用用户去猜
+   注意①只给**刚点的那一项**播，否则每次重画整列会一起闪（见 app.js）。 */
+
+/* ① 勾选框弹一下 */
+@keyframes act-pop {
+  0%   { transform: scale(.72); }
+  55%  { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+/* 整行轻轻往右沉一下，像被按下去 */
+@keyframes act-set {
+  0%   { transform: translateX(0); }
+  45%  { transform: translateX(3px); }
+  100% { transform: translateX(0); }
+}
+.action-item.is-pop { animation: act-set .22s ease; }
+.action-item.is-pop .action-box { animation: act-pop .26s cubic-bezier(.34,1.56,.64,1); }
+
+/* ② 「已记下 / 已取消」提示条 */
+.action-notice {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(52, 211, 153, .45);
+  background: rgba(52, 211, 153, .13);
+  color: #9df3cb;
+  font-size: var(--fs-4);
+  animation: notice-in .2s ease;
+}
+/* 取消的时候换红调 —— 同样是"生效了"，但结果不同，要一眼分得开 */
+.action-notice.is-off {
+  border-color: rgba(248, 113, 113, .45);
+  background: rgba(248, 113, 113, .12);
+  color: #ffbcbc;
+}
+/* 过一会儿淡出（停留多久在 config.js 的 noticeMs） */
+.action-notice.is-out { opacity: 0; transition: opacity .45s ease; }
+
+@keyframes notice-in {
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ---------- 打卡记录条（行动卡内部：最近几天的格子） ---------- */
@@ -615,7 +666,8 @@ body {
   .quote-card { padding: var(--sp-5); }
 }
 
-/* 用户在系统里开了「减少动态效果」就关掉过渡 */
+/* 用户在系统里开了「减少动态效果」，就把过渡和动画都关掉。
+   （Day 11 补：原来只关了 transition，动画还会照播 —— 这里补齐） */
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  * { transition: none !important; animation: none !important; }
 }
