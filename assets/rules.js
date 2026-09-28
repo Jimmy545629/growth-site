@@ -150,6 +150,55 @@
     return { done: done, possible: recent.length * perDay, days: recent.length };
   }
 
+  /* ------------------------------------------------------------
+     五、视图地址（Day 13 加）
+     ------------------------------------------------------------
+     为什么这三个函数放在 rules.js 而不是 app.js：
+       它们是**纯函数** —— 给一段地址，算出「这是哪个视图」，
+       不碰地址栏、不碰页面。所以不用开浏览器就能测
+       （verify-day13-rules.mjs 里就是这么测的）。
+       app.js 那边只负责「读一下地址栏 → 问这里 → 照着画」。 */
+
+  /* 把地址栏里那段 hash 洗成「干净的视图名」。
+       '#/library'  '#/library/'  '#/Library?x=1'  'library'  →  'library'
+     认不出来（比如 'xxx'）也照样返回 'xxx'，交给下面那个函数兜底。 */
+  function viewKey(hash) {
+    var s = String(hash === null || hash === undefined ? '' : hash);
+    if (s.charAt(0) === '#') s = s.slice(1);
+    while (s.charAt(0) === '/') s = s.slice(1);
+    var cut = s.indexOf('?');
+    if (cut >= 0) s = s.slice(0, cut);
+    cut = s.indexOf('#');
+    if (cut >= 0) s = s.slice(0, cut);
+    while (s.length && s.charAt(s.length - 1) === '/') s = s.slice(0, -1);
+    return s.toLowerCase();
+  }
+
+  /* 地址 → 视图 id。
+     ⚠️ 认不出来一律回默认视图：用户手打错一个字母，不该看到白屏。 */
+  function viewIdFromHash(hash, views, route) {
+    var list = (views && views.length) ? views : [];
+    var want = viewKey(hash);
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].id).toLowerCase() === want) return list[i].id;
+    }
+    return (route && route.defaultId) || (list[0] ? list[0].id : '');
+  }
+
+  /* 视图 id → 应该写进地址栏的那段 hash（认不出来就回默认视图的地址）。
+     这一条和上面那条是**一对**：来回换算不会丢信息。
+     地址栏里的地址一律由这里生成，不许在别处手写 '#/home' 这种字面量 ——
+     否则以后改前缀，就会漏掉几处。 */
+  function hashOfView(id, views, route) {
+    var list = (views && views.length) ? views : [];
+    var prefix = (route && route.prefix) || '#/';
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) return prefix + list[i].id;
+    }
+    var fallback = (route && route.defaultId) || (list[0] ? list[0].id : '');
+    return prefix + fallback;
+  }
+
   window.GROWTH_RULES = {
     dayKey: dayKey,
     fromKey: fromKey,
@@ -161,7 +210,11 @@
     isChecked: isChecked,
     streak: streak,
     recentDays: recentDays,
-    summary: summary
+    summary: summary,
+    /* Day 13 加 */
+    viewKey: viewKey,
+    viewIdFromHash: viewIdFromHash,
+    hashOfView: hashOfView
   };
 
 })();

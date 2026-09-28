@@ -653,17 +653,202 @@ body {
 /* 「计划收录来源」单独一行，用暖橙色标出来，避免被当成「已引用的来源」 */
 .foot-plan { color: var(--warm); }
 
+/* ============================================================
+   Day 13：三个视图 + 导航标签 + 列表的四种状态
+   ============================================================ */
+
+/* ---------- 视图容器 ----------
+   三个视图都在页面里，靠 hidden 属性切换。
+   ⚠️ 必须自己补一条 .view[hidden]：
+   浏览器默认样式表里那条 [hidden]{display:none} 优先级**低于**作者样式表，
+   一旦给 .view 写了自己的 display，hidden 就失效了（元素照样显示）。
+   （Day 12 那轮在别处踩过同一个坑，记在技能里了） */
+.view[hidden] { display: none; }
+
+/* ---------- 导航标签 ---------- */
+.tabs {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-5);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;              /* 可点元素下限 32×32，这里留宽一点更好按 */
+  min-width: 32px;
+  padding: 0 var(--sp-5);
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink-soft);
+  font-size: var(--fs-3);
+  text-decoration: none;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.tab:hover { border-color: rgba(255,255,255,.18); color: var(--ink); }
+
+/* 当前这一页：填充主色，一眼看出来。
+   对应的是 aria-current="page" 这个属性，不是自己另加的 class ——
+   读屏软件认的就是那个属性，两边必须说的是同一件事。 */
+.tab[aria-current="page"] {
+  background: linear-gradient(180deg, var(--brand), var(--brand-deep));
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+.tab[aria-current="page"]:hover { border-color: transparent; color: #fff; }
+
+/* ---------- 视图头（内容库 / 我的 用；「今日」有自己的大标题） ---------- */
+.view-head { margin-bottom: var(--sp-6); }
+.view-title {
+  margin: 0;
+  font-size: var(--fs-1);
+  font-weight: 800;
+  letter-spacing: .5px;
+}
+.view-desc {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-3);
+  color: var(--ink-soft);
+}
+
+/* ---------- 「我的」里的两个小节 ---------- */
+.me-sec { margin-bottom: var(--sp-7); }
+.me-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.me-title { margin: 0; font-size: var(--fs-2); font-weight: 700; }
+.me-count { font-size: var(--fs-4); color: var(--ink-faint); }
+
+/* ---------- 列表的四种状态 ---------- */
+.state {
+  padding: var(--sp-5);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--card);
+  text-align: center;
+}
+.state-mark {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-2);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-faint);
+}
+.state-title { margin: 0; font-size: var(--fs-3); font-weight: 600; color: var(--ink); }
+.state-hint {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-4);
+  color: var(--ink-faint);
+  line-height: 1.6;
+}
+.state-acts { margin-top: var(--sp-4); display: flex; justify-content: center; gap: var(--sp-2); }
+
+/* 出错：红调。这类信息要「马上被知道」，不能跟「空」长得一样 */
+.state-error {
+  border-color: rgba(248, 113, 113, .42);
+  background: rgba(248, 113, 113, .07);
+}
+.state-error .state-mark { color: #ffa8a8; }
+
+/* 加载中：几条灰条在动，表示「正在读」，不是卡住了 */
+.skeleton { margin-top: var(--sp-4); display: grid; gap: var(--sp-2); }
+.skeleton-row {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg,
+    rgba(255,255,255,.06), rgba(255,255,255,.14), rgba(255,255,255,.06));
+  background-size: 200% 100%;
+  animation: skeleton-move 1.3s linear infinite;
+}
+.skeleton-row:nth-child(2) { width: 92%; }
+.skeleton-row:nth-child(3) { width: 76%; }
+@keyframes skeleton-move {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+/* ---------- 四种状态对照（开发演示区） ---------- */
+.demo { margin-bottom: var(--sp-6); }
+.demo-head { margin-bottom: var(--sp-3); }
+.demo-title { margin: 0; font-size: var(--fs-2); font-weight: 700; }
+.demo-note { margin: var(--sp-1) 0 0; font-size: var(--fs-4); color: var(--ink-faint); }
+
+.demo-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+/* 虚线边框 = 明确「这是演示区，不是正式内容」，免得被当成功能 */
+.demo-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-3);
+  border-radius: var(--radius);
+  border: 1px dashed var(--line);
+  background: var(--bg-soft);
+}
+.demo-card.is-on { border-style: solid; border-color: var(--brand); }
+.demo-cap { margin: 0 0 var(--sp-2); font-size: var(--fs-4); font-weight: 700; color: var(--brand); }
+.demo-body { flex: 1; }
+/* 小卡片里状态块要紧一点，四格高度才接近、才比得出来 */
+.demo-body .state { padding: var(--sp-3); }
+.demo-body .state-title,
+.demo-body .state-hint { font-size: var(--fs-4); }
+.demo-body .skeleton { margin-top: var(--sp-3); }
+/* 对照格里只留两行标题，太长的截掉 —— 四格才能一样高 */
+.demo-body .entry { padding: var(--sp-2) 0; }
+.demo-body .entry-no { width: 18px; height: 18px; }
+.demo-body .entry-title {
+  font-size: var(--fs-4);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.demo-foot {
+  margin: var(--sp-2) 0 0;
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--fs-4);
+  color: var(--ink-faint);
+}
+
+.demo-controls { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.demo-ctl-label { font-size: var(--fs-4); color: var(--ink-faint); }
+
+/* ---------- 语录卡底部那条「去『我的』看收藏」入口 ----------
+   收藏**列表**搬到「我的」那页了，这条是它的入口。
+   为什么要留：按完收藏看不到任何结果，那个功能就等于不存在（Day 12 的教训）。 */
+.quote-more { margin: var(--sp-4) 0 0; font-size: var(--fs-4); color: var(--ink-faint); }
+.quote-more a { color: var(--warm); }
+
 /* ---------- 窄屏 ---------- */
 @media (max-width: 960px) {
   .hero { grid-template-columns: 1fr; }
   .columns { grid-template-columns: 1fr; }
+  /* 四格横排在小屏上挤不下 → 排成两行两列 */
+  .demo-row { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 640px) {
   .wrap { padding: var(--sp-5) var(--sp-4) var(--sp-7); }
   .stats { grid-template-columns: 1fr; }
-  .lead-title, .quote-text { font-size: var(--fs-2); }
+  .lead-title, .quote-text, .view-title { font-size: var(--fs-2); }
   .quote-card { padding: var(--sp-5); }
+  .tab { padding: 0 var(--sp-4); }
+  .demo-row { grid-template-columns: 1fr; }
+  .me-head { flex-wrap: wrap; }
 }
 
 /* 用户在系统里开了「减少动态效果」，就把过渡和动画都关掉。

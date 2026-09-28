@@ -11,7 +11,7 @@
 
   <div class="wrap">
 
-    <!-- ============ 顶栏 ============ -->
+    <!-- ============ 顶栏（三个视图共用） ============ -->
     <header class="topbar">
       <div class="brand">
         <!-- 图标：一本打开的书 + 向上的箭头，纯手写矢量，不引任何图标库 -->
@@ -33,28 +33,72 @@
       <div class="streak" id="streak"></div>
     </header>
 
-    <!-- ============ 元信息行 ============ -->
+    <!-- ============ 导航标签（Day 13 加） ============
+         用真正的 <nav> + <a href="#/...">：不写 JS 也能跳，
+         键盘能 Tab 到、能回车，浏览器「返回」键天然可用。
+         哪一个是当前页，由 app.js 打上 aria-current="page"。 -->
+    <nav class="tabs" id="tabs" aria-label="页面切换"></nav>
+
+    <!-- ============ 元信息行（三个视图共用） ============ -->
     <div class="meta-row" id="meta-row"></div>
 
-    <!-- ============ 三张统计卡 ============ -->
-    <section class="stats" id="stats" aria-label="今日概览"></section>
+    <!-- ============ 三个视图（Day 13） ============
+         三个 <section> 都在页面里，靠 hidden 属性切换显示。
+         每个视图有自己的地址：#/home、#/library、#/me
+         （地址怎么算出来、怎么切，全在 app.js 里；地址认不出来时回 #/home）。 -->
+    <main id="view-root">
 
-    <!-- ============ 大标题 ============ -->
-    <section class="lead">
-      <h2 class="lead-title">今天，该想明白什么？</h2>
-      <p class="lead-sub">一句话提升认知，三件事落到行动，外加一份政策与风口简报。</p>
-    </section>
+      <!-- ---------- 视图一：今日 ---------- -->
+      <section class="view" id="view-home" aria-label="今日">
 
-    <!-- ============ 首屏：左语录 + 右打卡 ============ -->
-    <section class="hero">
-      <article class="quote-card" id="quote-card" aria-label="今日认知语录"></article>
-      <aside class="action-card" id="action-card" aria-label="今日自律行动"></aside>
-    </section>
+        <!-- 三张统计卡 -->
+        <section class="stats" id="stats" aria-label="今日概览"></section>
 
-    <!-- ============ 三列榜单 ============ -->
-    <section class="columns" id="columns" aria-label="精选内容"></section>
+        <!-- 大标题 -->
+        <section class="lead">
+          <h2 class="lead-title">今天，该想明白什么？</h2>
+          <p class="lead-sub">一句话提升认知，三件事落到行动，外加一份政策与风口简报。</p>
+        </section>
 
-    <!-- ============ 底部 ============ -->
+        <!-- 首屏：左语录 + 右打卡 -->
+        <section class="hero">
+          <article class="quote-card" id="quote-card" aria-label="今日认知语录"></article>
+          <aside class="action-card" id="action-card" aria-label="今日自律行动"></aside>
+        </section>
+
+      </section>
+
+      <!-- ---------- 视图二：内容库 ---------- -->
+      <section class="view" id="view-library" aria-label="内容库" hidden>
+
+        <div class="view-head" id="library-head"></div>
+
+        <!-- 四种状态对照（开发演示区，不是给用户用的功能） -->
+        <div id="library-demo"></div>
+
+        <!-- 真正的内容库：三列榜单。
+             ⚠️ 这一块要能画出**四种状态**（空 / 加载中 / 出错 / 正常），
+             由 app.js 的 renderLibrary() 决定画哪一种。 -->
+        <div id="library-list"></div>
+
+      </section>
+
+      <!-- ---------- 视图三：我的 ---------- -->
+      <section class="view" id="view-me" aria-label="我的" hidden>
+
+        <div class="view-head" id="me-head"></div>
+
+        <!-- 我的收藏 -->
+        <section class="me-sec" id="me-favorites"></section>
+
+        <!-- 打卡记录（最近几天） -->
+        <section class="me-sec" id="me-history"></section>
+
+      </section>
+
+    </main>
+
+    <!-- ============ 底部（三个视图共用） ============ -->
     <footer class="foot" id="foot"></footer>
 
   </div>
@@ -63,7 +107,7 @@
   <script src="assets/config.js"></script>  <!-- 所有常量 -->
   <script src="assets/rules.js"></script>   <!-- 所有「算」的逻辑（纯函数） -->
   <script src="assets/store.js"></script>   <!-- 所有数据读写（唯一碰 localStorage 的文件） -->
-  <script src="assets/data.js"></script>    <!-- 所有内容 -->
-  <script src="assets/app.js"></script>     <!-- 画到页面上 + 收点击 -->
+  <script src="assets/data.js"></script>    <!-- 所有内容（含三个视图的名字与说明） -->
+  <script src="assets/app.js"></script>     <!-- 画到页面上 + 收点击 + 按地址切换视图 -->
 </body>
 </html>
