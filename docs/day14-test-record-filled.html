@@ -27,6 +27,9 @@
   .quote b { color: #8a6a00; }
   .warn { border: 1px solid #c00; color: #a00; padding: 7px 11px; margin-top: 10px; font-weight: 600; }
   .note { border: 1px solid #999; background: #f7f7f7; padding: 7px 11px; margin-top: 10px; }
+  .shot { border: 1px solid #bbb; padding: 6px; margin: 6px 0 0; background: #fafafa; }
+  .shot img { display: block; max-width: 100%; height: auto; }
+  .cap { font-size: 11.5px; color: #444; margin: 6px 0 0; }
   .key { color: #a00; font-weight: 700; }
   .miss { color: #a00; }
   .foot { margin-top: 16px; font-size: 11.5px; color: #666; border-top: 1px dashed #bbb; padding-top: 6px; }
@@ -57,38 +60,54 @@
     <tr><td style="width:26%"><b>网址</b></td><td>https://source-board.app.workbuddy.host/</td></tr>
     <tr><td><b>怎么发的</b></td><td>微信把网址 + 一段说明（<code>Day14-发给朋友的话.txt</code>）整段发过去</td></tr>
     <tr><td><b>他在哪打开的</b></td><td><b>他自己的手机</b>（所以「对方设备屏幕」名副其实）</td></tr>
-    <tr><td><b>他的使用方式</b></td><td><b>自行使用</b>，不是按五个任务逐条走 —— 用完之后把「想做但做不到的地方」反馈回来</td></tr>
+    <tr><td><b>什么时候</b></td><td><b>2026-09-30 18:21 / 18:22</b>（他边用边把截图发过来）</td></tr>
+    <tr><td><b>他看的是哪一版</b></td><td><b>线上 Day 13 版</b> —— 证据：他的截图里还写着「阅读 <b>20</b> 页」，而且没有「+ 添加一项」</td></tr>
+    <tr><td><b>他的使用方式</b></td><td>自行使用；<b>只走了五个任务里的两条</b>（② 和 ④），其余未执行</td></tr>
   </tbody>
 </table>
 
-<h2>二、反馈原文（Jimmy 转述）</h2>
+<h2>二、同伴的原话与截图（<span style="color:#c00">有证据</span>）</h2>
+
 <div class="quote">
-  <b>反馈一（行动项写死了）</b><br>
-  「今日里面的今日自律行动只是固定的三点，可以改成以该三点为基础，可以添加其他计划；
-  另外其中第一条里面的 <b>阅读二十页 改成阅读十页</b>，降低行动难度。」
+  <b>原话一 · 18:21</b><br>
+  「<b>这个第二点我找不到怎么操作</b>」
 </div>
+<div class="shot">
+  <img src="screenshots/day14/friend-01-action-cannot-find.png" alt="朋友发来的聊天与今日页截图">
+</div>
+<p class="cap">他手机上的「今日」页：三项<b>一个都没勾</b>，底下写着「今天已完成 <b>0 / 3</b>」。
+   <b>注意：三项前面的小方框其实都画出来了 —— 他没认出来那是可以点的。</b></p>
+
 <div class="quote">
-  <b>反馈二（打卡记录点不开）</b><br>
-  「我的页面里面，<b>近七天打卡记录无法点进去具体查看做了什么</b>。
-  预期：点进某天打卡记录里面，可以查看当天做了什么，<b>要拥有记忆和查看功能</b>。」
+  <b>原话二 · 18:22</b><br>
+  「<b>然后这里一直加载不出来</b>」
 </div>
+<div class="shot">
+  <img src="screenshots/day14/friend-02-demo-stuck-loading.png" alt="朋友发来的内容库截图与他的原话">
+</div>
+<p class="cap">他停在「内容库」那块<b>「四种状态对照」开发演示区</b>上（空 / 加载中 / 出错）。
+   他看到「加载中」那一格的灰条，<b>以为真正的页面卡住了</b>。</p>
+
 <div class="note">
-  ⚠️ <b>上面两段是转述，不是对方逐字原话。</b>对方发来的原始微信消息<b class="miss">未留存</b>。
-  守则第 4 条要求「原话照抄」—— 这条<b>这次没做到</b>，如实记下。
+  ⚠️ <b>「我转述的反馈」和「他真说的」不一样，分开记。</b>
+  下面三条是 <b>Jimmy 转述/补充</b>的，对方原话里<b class="miss">没有对应的句子</b>（无截图佐证）：<br>
+  ① 「行动项只是固定的三点，想能添加其他计划」—— 与<b>原话一</b>是同一件事的两种说法，可互相印证；<br>
+  ② 「阅读 20 页 → 10 页」—— Jimmy 的判断；<br>
+  ③ 「近七天打卡记录无法点进去查看」—— Jimmy 的判断。<br>
+  <b>为什么必须分开</b>：把「自己想要的」记成「用户说的」，下次排优先级就会把力气投错地方。
 </div>
 
 <h2>三、五个任务的执行情况</h2>
 <div class="note" style="margin-top:4px">
-  <b>⚠️ 本次<b class="miss">未按清单逐条执行</b>。</b>对方是「自己用」，不是「按任务做」，
-  所以下面 5 行<b>没有逐条的观察记录</b>（这也意味着「他第一步点了哪」这类最有价值的数据这次没拿到）。
-  拿到的是<b>需求型反馈</b>：「我想做这件事，但页面上做不到」。
+  <b>只走了其中两条</b>：任务 ②（记下今天做到的一件事）和任务 ④（找政策类内容）——
+  这两条正好就是他截图反馈的那两处。其余三条<b class="miss">未执行</b>。
 </div>
 <table>
   <thead>
     <tr>
       <th style="width:33%">任务</th>
-      <th style="width:17%">执行情况</th>
-      <th style="width:26%">观察到的 / 他说的</th>
+      <th style="width:14%">执行情况</th>
+      <th style="width:29%">观察到的 / 他说的</th>
       <th style="width:12%">被提示</th>
       <th style="width:12%">做成</th>
     </tr>
@@ -96,36 +115,36 @@
   <tbody>
     <tr>
       <td>1　说清它是什么、给谁用</td>
-      <td class="miss">未记录</td>
+      <td class="miss">未执行</td>
       <td class="miss">未记录</td>
       <td class="miss">未记录</td>
       <td class="miss">未记录</td>
     </tr>
     <tr>
       <td>2　记住一件事（打卡）</td>
-      <td class="miss">未逐条执行</td>
-      <td>相关：反馈一 —— 他想记的是<b>自己的事</b>，页面只给 3 个写死的选项，加不了</td>
-      <td class="miss">未记录</td>
-      <td class="miss">未记录</td>
+      <td><b>走了</b></td>
+      <td><b>卡住</b> ——「这个第二点我找不到怎么操作」<br>截图里 <b>0 / 3</b>，一项都没勾</td>
+      <td><b>无</b>（远程，没给提示）</td>
+      <td class="miss">否</td>
     </tr>
     <tr>
       <td>3　收藏并找回来</td>
-      <td class="miss">未记录</td>
+      <td class="miss">未执行</td>
       <td class="miss">未记录</td>
       <td class="miss">未记录</td>
       <td class="miss">未记录</td>
     </tr>
     <tr>
       <td>4　找政策类内容</td>
-      <td class="miss">未记录</td>
-      <td class="miss">未记录</td>
-      <td class="miss">未记录</td>
-      <td class="miss">未记录</td>
+      <td><b>走了</b></td>
+      <td><b>以为坏了</b> ——「然后这里一直加载不出来」<br>他停在「四种状态对照」演示区上</td>
+      <td><b>无</b></td>
+      <td class="miss">否</td>
     </tr>
     <tr>
       <td>5　关掉重开，还在吗</td>
+      <td class="miss">未执行</td>
       <td class="miss">未记录</td>
-      <td>相关：反馈二 —— 他想<b>回看某天做了什么</b>，那排格子点了没反应</td>
       <td class="miss">未记录</td>
       <td class="miss">未记录</td>
     </tr>
@@ -138,10 +157,10 @@
     <tr><th style="width:44%">问题</th><th>他的回答</th></tr>
   </thead>
   <tbody>
-    <tr><td>刚才有没有哪一步，你其实不知道下一步该点哪？</td><td class="miss">未问 / 未记录</td></tr>
+    <tr><td>刚才有没有哪一步，你其实不知道下一步该点哪？</td><td class="miss">未问 —— 但答案已经写在原话一里了</td></tr>
     <tr><td>如果只用一句话说这是个什么网站，你会怎么说？</td><td class="miss">未问 / 未记录</td></tr>
-    <tr><td>有哪个地方你觉得是坏的 / 不好用的？</td><td>见反馈一、二（转述）</td></tr>
-    <tr><td>你还会再来第二次吗？为什么？</td><td class="miss">未问 / 未记录 —— <b>这条最可惜</b></td></tr>
+    <tr><td>有哪个地方你觉得是坏的 / 不好用的？</td><td>原话二：「然后这里一直加载不出来」</td></tr>
+    <tr><td>你还会再来第二次吗？为什么？</td><td class="miss">未问 —— <b>这条最可惜</b></td></tr>
   </tbody>
 </table>
 
@@ -149,14 +168,16 @@
 <table>
   <tbody>
     <tr><td style="width:30%"><b>卡得最久的一步</b>是哪一步？</td>
-        <td><b>严格说不是「卡」</b> —— 是「<b>想做，但页面上没有那个入口</b>」：
-            想把行动项改成自己的（加不了）、想点开某天看做了什么（点不开）。</td></tr>
+        <td>任务 ②：<b>他不知道怎么「记下今天做到的一件事」</b>。
+            而三项前面的小方框<b>就在他自己截的图里</b> —— 他还是没认出来。</td></tr>
     <tr><td><b>最像「功能坏了」</b>的是哪一处？</td>
-        <td>「我的」里那排<b>近 7 天格子</b> —— 看起来能点、点了没反应，最容易被当成坏了。</td></tr>
+        <td>「内容库」那块<b>「四种状态对照」演示区</b>。他说「一直加载不出来」——
+            那是<b>只有知道真相的人（我）才知道它是演示区</b>的，用户只知道它坏了。</td></tr>
     <tr><td>如果<b>只能修一条</b>，我修哪条？为什么？</td>
-        <td><b>按规则本应只修一条</b>（第八节：有人完全做不成某任务 → 优先修它）。
-            但 <b>Jimmy 明确选了「三条全做」</b>，属他批准的扩范围，已记在
-            <code>PRD.md</code> / <code>CHANGELOG.md</code> / <code>README.md</code> 三处。</td></tr>
+        <td>按第八节规则本应只修一条（<b>卡点①</b>：有人完全做不成 → 优先修）。
+            当时 Jimmy 明确选了「三条全做」，属他批准的扩范围。
+            ⚠️ 但按规则，<b>真正最该优先修的是卡点②（有人觉得坏了 = 信任问题）</b>——
+            它<b class="miss">今天没修</b>，因为当时还没拿到这两张截图。</td></tr>
   </tbody>
 </table>
 
@@ -182,6 +203,10 @@
         <td>桌面 <code>Day14-改动验证截图/</code> 5 张，每张都亲眼看过。
             其中 <code>day14-03-gone-item-kept</code> 证明
             「<b>删掉一项后那天的完成数仍然是 2</b>」</td></tr>
+    <tr><td><b class="miss">还没修的</b></td>
+        <td><b class="miss">卡点②</b>（内容库那块演示区让人以为页面坏了）—— <b>今天没修</b>。
+            按第八节的规则，它属于「有人觉得坏了 = 信任问题」，本该优先于这次做的那些功能；
+            当时还没拿到他的截图。</td></tr>
   </tbody>
 </table>
 
@@ -190,11 +215,13 @@
 </div>
 
 <div class="note">
-  <b>本次测试的三个缺口（如实记，不补）</b>：<br>
-  ① 对方发来的<b>原始截图</b>未存进项目（训练营要的「对方设备屏幕」现场图在 Jimmy 手上）；
-  ② 对方的<b>逐字原话</b>未留存，第二节是转述；
-  ③ <b>结束四问</b>未问，尤其「还会再来第二次吗」没问到。<br>
-  ➜ 因此测试方案文档第七节那四个「可疑卡点」<b>至今仍是预判，一条都没被验证</b>，不许当成结果用。
+  <b>证据情况（18:57 更新）</b>：<br>
+  ① 对方反馈的<b>原始截图</b> —— <b>已归档</b> → <code>docs/screenshots/day14/</code>；<br>
+  ② 对方的<b>逐字原话</b> —— <b>已有两条</b>（第二节那两句）；<br>
+  ③ <b>结束四问</b> —— <span class="miss">仍未问</span>，尤其「你还会再来第二次吗」；<br>
+  ④ 五个任务 —— 只走了 <b>②④ 两条</b>；<br>
+  ⑤ 另有三条反馈是 <b>Jimmy 转述/补充</b>，不是对方原话（第二节已单列）。<br>
+  ➜ 第七节四个「可疑卡点」里：<b>A 已被真人验证</b>（就是卡点②），<b>B / C / D 仍是预判</b>。
 </div>
 
 <p class="foot">
