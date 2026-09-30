@@ -151,6 +151,109 @@
   }
 
   /* ------------------------------------------------------------
+     四·B、行动项：默认项 + 自己加的项（Day 14 加）
+     ------------------------------------------------------------
+     为什么放在 rules.js：这里是「算」——
+     把两份清单合成一份、把外面的脏数据洗干净、给新项起个不撞的名字。
+     全都不碰存储、不碰页面，所以命令行里就能测。 */
+
+  /* 洗一遍「自己添加的项」。
+     数据是从浏览器里读回来的（也可能刚从输入框来），
+     不能假设它长得对：entry 不是对象、id 是空的、文字是空白、
+     文字超长、同一个 id 出现两次 —— 一律处理掉，绝不让页面报错。 */
+  function cleanCustom(list, maxText, maxCount) {
+    var maxLen = maxText || C.customTextMax;
+    var maxN = maxCount || C.customMax;
+    if (Object.prototype.toString.call(list) !== '[object Array]') return [];
+
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      if (!a || typeof a !== 'object') continue;
+
+      var id = (typeof a.id === 'string') ? a.id : '';
+      var text = (typeof a.text === 'string') ? a.text : '';
+      /* 前后空白去掉；只留空白的项等于没写 */
+      text = text.replace(/^\s+|\s+$/g, '');
+      if (!id || !text) continue;
+      if (seen[id]) continue;
+      seen[id] = true;
+
+      /* 超长就砍掉尾巴 —— 比整条丢掉好：用户至少看得见自己写的东西 */
+      if (text.length > maxLen) text = text.slice(0, maxLen);
+
+      var hint = (typeof a.hint === 'string') ? a.hint.slice(0, 40) : '';
+      out.push({ id: id, text: text, hint: hint });
+      if (out.length >= maxN) break;
+    }
+    return out;
+  }
+
+  /* 两份清单合成「今天要做的所有事」：默认项在前，自己加的在后。
+     每一项都带 custom 标记 —— 页面靠它决定「这一项能不能删」。 */
+  function allActions(defaults, custom) {
+    var out = [];
+    var defs = (Object.prototype.toString.call(defaults) === '[object Array]') ? defaults : [];
+    for (var i = 0; i < defs.length; i++) {
+      var d = defs[i];
+      if (!d || typeof d !== 'object') continue;
+      if (typeof d.id !== 'string' || !d.id) continue;
+      if (typeof d.text !== 'string' || !d.text) continue;
+      out.push({ id: d.id, text: d.text, hint: d.hint || '', custom: false });
+    }
+    var mine = cleanCustom(custom);
+    for (var j = 0; j < mine.length; j++) {
+      out.push({ id: mine[j].id, text: mine[j].text, hint: mine[j].hint, custom: true });
+    }
+    return out;
+  }
+
+  /* 给新加的一项起个名字（id）。
+     ⚠️ 为什么不让它自己去拿 Date.now()：那样它就不是纯函数了
+     （同样输入会得到不同结果，命令行里没法测）。
+     所以时间戳由外面传进来，这里只负责「保证不和已有的撞」。 */
+  function customId(seed, taken) {
+    var base = 'c' + String(seed);
+    var used = (Object.prototype.toString.call(taken) === '[object Array]') ? taken : [];
+    var id = base;
+    var n = 1;
+    while (used.indexOf(id) >= 0) { n++; id = base + '-' + n; }
+    return id;
+  }
+
+  /* 某一天的「明细」——「我的」里点开某一格要看的东西。
+     返回当天做了哪几项（带文字），以及「记录里留着、但现在列表里已经没有」的项。
+     ⚠️ 最后那一类**必须单独列出来，不许悄悄丢掉**：
+     用户删掉一个自定义项之后，以前打过卡的那天不能因此少算一项。 */
+  function dayDetail(days, key, acts, todayKey) {
+    var ids = cleanIds(days ? days[key] : null);
+    var list = (Object.prototype.toString.call(acts) === '[object Array]') ? acts : [];
+
+    var done = [];
+    var gone = [];
+    for (var i = 0; i < ids.length; i++) {
+      var hit = null;
+      for (var j = 0; j < list.length; j++) {
+        if (list[j] && list[j].id === ids[i]) { hit = list[j]; break; }
+      }
+      if (hit) done.push({ id: hit.id, text: hit.text, hint: hit.hint || '' });
+      else gone.push(ids[i]);
+    }
+
+    return {
+      key: key,
+      label: dayLabel(key, todayKey),
+      weekday: weekdayOf(key),
+      done: done,
+      gone: gone,
+      count: ids.length,
+      total: list.length,
+      checked: isChecked(ids)
+    };
+  }
+
+  /* ------------------------------------------------------------
      五、视图地址（Day 13 加）
      ------------------------------------------------------------
      为什么这三个函数放在 rules.js 而不是 app.js：
@@ -211,6 +314,11 @@
     streak: streak,
     recentDays: recentDays,
     summary: summary,
+    /* Day 14 加：行动项合并 / 清洗 / 起名 / 某天明细 */
+    cleanCustom: cleanCustom,
+    allActions: allActions,
+    customId: customId,
+    dayDetail: dayDetail,
     /* Day 13 加 */
     viewKey: viewKey,
     viewIdFromHash: viewIdFromHash,

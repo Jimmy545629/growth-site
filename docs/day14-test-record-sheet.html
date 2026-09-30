@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Day 14｜真实用户测试记录表</title>
+<style>
+  /* 这一份是**要打印的**，所以强制走浅色：
+     深色底打印出来会是一整页黑，又费墨又看不清。 */
+  html, body { background: #fff; color: #111; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    font-size: 13px; line-height: 1.6;
+    margin: 0; padding: 18px 22px 30px;
+    max-width: 900px;
+  }
+  h1 { font-size: 19px; margin: 0 0 2px; }
+  .sub { color: #666; font-size: 12px; margin: 0 0 14px; }
+  h2 {
+    font-size: 14px; margin: 16px 0 6px; padding-bottom: 4px;
+    border-bottom: 2px solid #111;
+  }
+  .meta-line { display: flex; gap: 22px; flex-wrap: wrap; font-size: 12.5px; margin-bottom: 4px; }
+  .blank { display: inline-block; border-bottom: 1px solid #999; min-width: 108px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 4px; }
+  th, td { border: 1px solid #999; padding: 4px 6px; vertical-align: top; font-size: 12px; }
+  th { background: #f0f0f0; font-weight: 600; text-align: left; }
+  td { height: 46px; }
+  td.n { width: 24px; text-align: center; font-weight: 700; }
+  td.task { width: 200px; }
+  col.c1 { width: 14%; }
+  col.c2 { width: 17%; }
+  col.c3 { width: 23%; }
+  col.c4 { width: 9%; }
+  col.c5 { width: 8%; }
+  .rules { background: #f7f7f7; border: 1px solid #ccc; padding: 8px 12px 8px 26px; margin: 4px 0 0; }
+  .rules li { margin: 3px 0; }
+  .script { background: #fffdf2; border-left: 3px solid #d9a300; padding: 6px 12px; margin: 5px 0; }
+  .script b { color: #8a6a00; }
+  .warn { border: 1px solid #c00; color: #a00; padding: 6px 10px; margin-top: 10px; font-weight: 600; }
+  .key { color: #a00; font-weight: 700; }
+  .foot { margin-top: 16px; font-size: 11.5px; color: #666; border-top: 1px dashed #bbb; padding-top: 6px; }
+  @media print {
+    body { padding: 0 10mm; font-size: 12px; }
+    .rules, .script { break-inside: avoid; }
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Day 14｜真实用户测试记录表</h1>
+<p class="sub">大学生成长网站 · 轻量可用性测试 · 目标：找出同伴卡在哪一步</p>
+
+<div class="meta-line">
+  <span><b>测试者</b>（同伴，写化名即可）：<span class="blank" style="min-width:130px"></span></span>
+  <span><b>日期</b>：<span class="blank" style="min-width:130px"></span></span>
+</div>
+<div class="meta-line">
+  <span><b>设备</b>（手机 / 电脑）：<span class="blank" style="min-width:170px"></span></span>
+  <span><b>方式</b>：远程微信 ✓ ／ 现场</span>
+  <span><b>用时</b>：<span class="blank" style="min-width:60px"></span> 分钟</span>
+</div>
+
+<h2>一、测试前准备（远程版，5 分钟）</h2>
+<div class="script"><b>网址：</b>https://source-board.app.workbuddy.host/</div>
+<div class="script"><b>做法：</b>用微信把<b>上面这个网址</b>＋桌面上的 <b>Day14-发给朋友的话.txt</b> 整段发给他，让他用<b>自己的手机</b>打开、<b>边做边截图</b>，做完一起发你。</div>
+<div class="warn" style="border-color:#c00">发完就等着 —— <b>别追问「你点到了吗」「是不是点那个」</b>。一追问就等于给了提示，这次测试就白做了。</div>
+
+<h2>二、主持人守则（违反了这次测试就白做）</h2>
+<ol class="rules">
+  <li><b>不指路。</b>他说「这个怎么弄」，你回「你觉得呢？随便试」。<span class="key">绝对不说「你点那个按钮」。</span></li>
+  <li><b>不提示、不追问。</b>他卡住了就让他卡着 —— <span class="key">你一提示，这条数据就废了。</span></li>
+  <li><b>只问「你现在在想什么」，不问「你是不是没看见 X」。</b>（前者问此刻，后者是诱导）</li>
+  <li><b>他的原话照抄。</b>微信里他发的原话直接复制粘贴，别改写、别总结。</li>
+  <li><b>全程不解释、不辩护。</b>不说「这个以后会做」。听完只回一句「好，记下了」。</li>
+</ol>
+<p class="sub" style="margin:4px 0 0">远程版说明：你看不到他的手，「卡住」以<b>他自己说卡住</b>为准（原来那条「等 60 秒」在远程没法执行）。</p>
+
+<h2>三、五个任务与记录（任务已写在转发的话里，这张表只用来记）</h2>
+<table>
+  <thead>
+    <tr>
+      <th class="n">#</th>
+      <th class="task">任务<br><span style="font-weight:400">（念给他听的话）</span></th>
+      <th style="width:13%">① 他第一步<br>点了哪<br><span style="font-weight:400">（从他发的<br>截图里读）</span></th>
+      <th style="width:17%">② 卡在哪一步<br>/ 卡了多久</th>
+      <th style="width:23%">③ 他说了什么原话<br><span style="font-weight:400">（微信原话直接<br>复制，最重要）</span></th>
+      <th style="width:10%">④ 被提示<br>了吗</th>
+      <th style="width:8%">⑤ 做成<br>了吗</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="n">1</td>
+      <td class="task">「你先看一眼这个页面，然后用自己的话说：<b>它是干什么用的、给谁用的</b>。」</td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>
+    <tr>
+      <td class="n">2</td>
+      <td class="task">「假设你想记下<b>你今天做到的一件事</b>。你来操作一下，让它记住。」</td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>
+    <tr>
+      <td class="n">3</td>
+      <td class="task">「这里面有句话你可能比较认同，<b>把它存下来</b>。然后过一会儿，<b>再找到你存过的东西</b>。」</td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>
+    <tr>
+      <td class="n">4</td>
+      <td class="task">「我想看看<b>政策、经济、风口</b>那一类的东西。你找出来，然后告诉我：<b>它建议我学什么技能</b>。」</td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>
+    <tr>
+      <td class="n">5</td>
+      <td class="task">「现在把<b>整个浏览器关掉</b>，重新打开刚才那个网址。看看你刚才做的那两件事<b>还在不在</b>。」</td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>四、任务 4 之后必须追问这两句</h2>
+<div class="script">「这个页面上，有没有哪一块你<b>看不懂</b>，或者觉得<b>不该给我看</b>的？」</div>
+<div class="script">「有没有哪个地方让你觉得 <b>它坏了</b>？」</div>
+<table>
+  <tbody>
+    <tr><td style="height:52px"></td></tr>
+  </tbody>
+</table>
+
+<h2>五、结束必问四句（今天最重要的四条数据）</h2>
+<table>
+  <thead>
+    <tr><th style="width:38%">问题</th><th>他的回答（<span class="key">照抄原话</span>）</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>刚才有没有哪一步，你其实<b>不知道下一步该点哪</b>？</td><td></td></tr>
+    <tr><td>如果只用一句话说这是个什么网站，你会怎么说？</td><td></td></tr>
+    <tr><td>有哪个地方你觉得是<b>坏的 / 不好用的</b>？</td><td></td></tr>
+    <tr><td>你<b>还会再来第二次</b>吗？为什么？</td><td></td></tr>
+  </tbody>
+</table>
+
+<h2>六、测完自己填三行（3 分钟，趁还记得）</h2>
+<table>
+  <tbody>
+    <tr><td style="width:38%"><b>卡得最久的一步</b>是哪一步？</td><td></td></tr>
+    <tr><td><b>最像「功能坏了」</b>的是哪一处？</td><td></td></tr>
+    <tr><td>如果<b>只能修一条</b>，我修哪条？为什么？</td><td></td></tr>
+  </tbody>
+</table>
+
+<div class="warn">今天的红线：不改版、不一口气全改。只挑一条最要命的修。</div>
+
+<p class="foot">
+  Day 14 · 大学生成长网站 · growth-site ｜ 完整方案见仓库 <code>docs/day14-usability-test.md</code><br>
+  测试完把这张表拍照存档，连同「同伴设备上的页面」一起作为今天的截图证据。
+</p>
+
+</body>
+</html>

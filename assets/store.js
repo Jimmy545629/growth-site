@@ -21,6 +21,7 @@
      打卡和收藏各有一块，互不干扰。 */
   var memoryData = null;
   var memoryFav = null;
+  var memoryCustom = null;   /* Day 14：自己添加的行动项（存不住时的兜底） */
 
   var probed = false;      /* 有没有试过 localStorage 能不能用 */
   var usable = false;      /* 试的结果 */
@@ -118,6 +119,48 @@
     return { version: C.favSchemaVersion, ids: R.cleanIds(data.ids) };
   }
 
+  /* ---------- 自己添加的行动项：第三只抽屉（Day 14 加） ----------
+     结构和上面两只一样：读坏了、版本对不上、存不住，一律按「空」处理。
+     存的是 [{ id, text, hint }]，**只存自己加的那些** ——
+     默认那 3 项永远从 data.js 来，不在这儿存第二份
+     （否则就违反「同一个事实只允许有一个来源」）。 */
+
+  function blankCustom() {
+    return { version: C.customSchemaVersion, items: [] };
+  }
+
+  function readCustom() {
+    var s = storage();
+    if (!s) return memoryCustom || (memoryCustom = blankCustom());
+
+    var raw = null;
+    try { raw = s.getItem(C.customKey); } catch (e) { return blankCustom(); }
+    if (!raw) return blankCustom();
+
+    var data = null;
+    try { data = JSON.parse(raw); } catch (e) { return blankCustom(); }
+
+    if (!data || typeof data !== 'object') return blankCustom();
+    if (data.version !== C.customSchemaVersion) return blankCustom();
+    /* 逐条清洗，顺手去重、限长、限个数 */
+    return {
+      version: C.customSchemaVersion,
+      items: R.cleanCustom(data.items, C.customTextMax, C.customMax)
+    };
+  }
+
+  function writeCustom(data) {
+    var s = storage();
+    if (!s) { memoryCustom = data; return false; }
+    try {
+      s.setItem(C.customKey, JSON.stringify(data));
+      return true;
+    } catch (e) {
+      memoryCustom = data;
+      return false;
+    }
+  }
+
   function writeFav(data) {
     var s = storage();
     if (!s) { memoryFav = data; return false; }
@@ -187,15 +230,52 @@
       return at < 0;
     },
 
+    /* ---------- 自己添加的行动项（Day 14 加） ---------- */
+
+    /* 只返回**自己加的**那些（不含默认 3 项）。
+       要「今天全部要做的事」，用 R.allActions(D.actions, S.getCustomActions())。 */
+    getCustomActions: function () { return readCustom().items; },
+
+    /* 加一项。返回结果对象，让页面知道「成没成、为什么没成」：
+         { ok: true,  id }              —— 加上了
+         { ok: false, reason: 'empty' } —— 手机上只打了空格
+         { ok: false, reason: 'full' }  —— 已经到上限
+       ⚠️ 满了要**如实说**，不能默默不生效（Day 10 学到的：界面和事实必须一致）。 */
+    addCustomAction: function (text, id) {
+      var now = readCustom().items;
+      if (now.length >= C.customMax) return { ok: false, reason: 'full' };
+
+      var clean = R.cleanCustom([{ id: id, text: text }], C.customTextMax, 1);
+      if (!clean.length) return { ok: false, reason: 'empty' };
+
+      var items = now.slice();
+      items.push(clean[0]);
+      writeCustom({ version: C.customSchemaVersion, items: items });
+      return { ok: true, id: clean[0].id };
+    },
+
+    /* 删一项。
+       ⚠️ 删的只是「列表里的这一项」，**打卡记录一个字都不动** ——
+       以前打过卡的那些天，存储里那条 id 还在，历史完成数因此不会变小。
+       页面会把它显示成「（这一项已被删除）」。 */
+    removeCustomAction: function (id) {
+      var now = readCustom().items;
+      var left = now.filter(function (a) { return a.id !== id; });
+      writeCustom({ version: C.customSchemaVersion, items: left });
+      return left;
+    },
+
     /* 清空全部记录。界面上没有入口，只给验证脚本用。 */
     clearAll: function () {
       var s = storage();
       if (s) {
         try { s.removeItem(C.storeKey); } catch (e) {}
         try { s.removeItem(C.favKey); } catch (e) {}
+        try { s.removeItem(C.customKey); } catch (e) {}
       }
       memoryData = null;
       memoryFav = null;
+      memoryCustom = null;
     }
 
   };

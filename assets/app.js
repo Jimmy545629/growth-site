@@ -33,6 +33,22 @@
   function todayKey() { return S.todayKey(); }
   function doneIds() { return S.getDay(todayKey()); }
 
+  /* 「今天要做的事」= 默认 3 项（data.js）+ 自己加的项（浏览器存储里）。
+     ⚠️ **全页只有这一个来源**（AGENTS 第 4 条第 9 项，「同一个事实只允许有一个来源」）：
+     统计卡的分母、行动列表、进度文字、「我的」里的完成度，全都走这里。
+     哪一处要是自己去拼 D.actions，就会重新长回 Day 10 那个「同一屏两个数」的毛病。 */
+  function allActions() { return R.allActions(D.actions, S.getCustomActions()); }
+
+  /* 删除类操作统一走这里（AGENTS 第 4 条第 11 项）。
+     现在只有一个地方用：删掉自己加的某一项行动。
+     为什么要封装而不是随手写 window.confirm：以后再加删除入口时，
+     不会有人图省事直接写 confirm()，把「说清会丢什么、能不能撤销」那一段漏掉。 */
+  function confirmDanger(title, lines) {
+    var msg = title + '\n\n';
+    for (var i = 0; i < lines.length; i++) msg += '· ' + lines[i] + '\n';
+    return window.confirm(msg);
+  }
+
   /* ---------- 最小构建器 ----------
      h('div', { class: 'box' }, 子节点…)
      支持 class / text / 其它属性 / style 对象。子节点可以是元素、字符串、数组、null。 */
@@ -216,6 +232,10 @@
          否则刚才那条「已记下…」会跟着页面回来，看着像刚点的。 */
       justToggled = null;
       notice = null;
+      /* 切走再回来，「加一项」的输入行收起来（Day 14）——
+         不然回来时半截没写完的字还挂在那儿，像没关好的抽屉。 */
+      addingCustom = false;
+      addMsg = '';
       renderStats();
       renderQuote();
       renderActions();
@@ -300,15 +320,16 @@
   function countDone() {
     var ids = doneIds();
     var n = 0;
-    D.actions.forEach(function (a) { if (ids.indexOf(a.id) >= 0) n++; });
+    allActions().forEach(function (a) { if (ids.indexOf(a.id) >= 0) n++; });
     return n;
   }
 
   /* 把完成情况翻译成统计卡需要的那三段文字 */
   function actionStat() {
     var ids = doneIds();
-    var total = D.actions.length;
-    var left = D.actions.filter(function (a) { return ids.indexOf(a.id) < 0; });
+    var acts = allActions();
+    var total = acts.length;
+    var left = acts.filter(function (a) { return ids.indexOf(a.id) < 0; });
     return {
       value: String(total - left.length),
       unit: '/ ' + total,
@@ -435,12 +456,26 @@
   var notice = null;
   var noticeTimer = null;
 
+  /* 行动卡里「自己加一项」那块的状态（Day 14 加）：
+       addingCustom —— 输入行有没有展开着
+       addMsg       —— 展开时下面那句话（比如「写点什么再加吧」）；空的就不显示 */
+  var addingCustom = false;
+  var addMsg = '';
+
+  /* 输入行刚画出来要能直接打字，不然用户还得再点它一下。
+     为什么单独写成函数：重画会把 input 换成一个新的，得重新去找到它。 */
+  function focusAddInput() {
+    var el = document.getElementById('input-add-action');
+    if (el) el.focus();
+  }
+
   function renderActions() {
     var box = document.getElementById('action-card');
     if (!box) return;
     clear(box);
     var ids = doneIds();
-    var total = D.actions.length;
+    var acts = allActions();
+    var total = acts.length;
 
     add(box, h('h2', { class: 'action-title', text: '今日自律行动' }));
     add(box, h('p', { class: 'action-sub', text: '点一下就算完成。记录只存在你自己的浏览器里，不上传、也不用登录。' }));
@@ -450,7 +485,7 @@
 
     var ul = h('ul', { class: 'action-list' });
 
-    D.actions.forEach(function (a) {
+    acts.forEach(function (a) {
       var on = ids.indexOf(a.id) >= 0;
       var li = h('li', {
         /* is-pop 只挂给「刚点的那一项」，动画因此只播一次 */
@@ -462,6 +497,32 @@
       add(li, h('span', { class: 'action-text' },
         a.text,
         h('span', { class: 'action-hint', text: a.hint })));
+
+      /* 只有**自己加的**项才给「×」。默认那 3 项不给 —— PRD 6.5 定死了不许删。 */
+      if (a.custom) {
+        var del = h('button', {
+          class: 'action-del', type: 'button',
+          'aria-label': '删除「' + a.text + '」',
+          title: '删除这一项', text: '×'
+        });
+        del.addEventListener('click', function (e) {
+          /* ⚠️ 这句不能省：不拦下来的话，点「×」会连这一行的勾选一起触发
+             （li 上挂着 toggle），表现就是「删掉的同时还顺手打了一次卡」。 */
+          e.stopPropagation();
+          if (!confirmDanger('「' + a.text + '」—— ' + D.actionAdd.delTitle, D.actionAdd.delLines)) return;
+          S.removeCustomAction(a.id);
+          notice = null;        /* 刚删掉的东西，别再挂着它的提示 */
+          renderActions();
+          renderStats();
+          renderStreak();
+          if (currentView === 'me') renderMeHistory();   /* 顺手把「我的」那页的完成度也刷新 */
+        });
+        /* 键盘同理：不拦的话，焦点在「×」上按回车会先把这一行勾上 */
+        del.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+        });
+        add(li, del);
+      }
 
       function toggle() {
         /* 先写进记录，再重画 —— 顺序反了就会出现「屏幕上勾上了、
@@ -502,12 +563,104 @@
       '今天已完成 ', h('b', { text: done + ' / ' + total }),
       done === total ? ' —— 全部完成，明天见。' : ' —— 别断在这儿。'));
 
+    /* ---------- 自己加一项（Day 14 加） ----------
+       ⚠️ 放在**列表下面**，点了当场变成一行输入框。
+       PRD 6.4 写死了「不设子视图、不做弹窗」，所以这里走的是「就地展开」：
+       地址栏不变、不新开页面、不遮住别的内容。 */
+    add(box, renderActionAdd(acts));
+
     /* ⚠️ 「最近几天的记录」这块 Day 13 搬到「我的」那页了（renderMeHistory），
        不再塞在这张卡里 —— 打卡卡只管「今天」，历史去「我的」看。 */
 
     /* 「刚点的那一项」这个标记用完就撤 ——
        否则以后随便哪次重画，它都会再弹一遍动画。 */
     justToggled = null;
+  }
+
+  /* 「+ 添加一项」那一块。收起时是一个按钮，展开时是「输入框 + 加上 + 取消」。 */
+  function renderActionAdd(acts) {
+    var T = D.actionAdd;
+    var wrap = h('div', { class: 'action-add' });
+
+    /* 只数「自己加的」有几项 —— 不能拿 acts.length 减 D.actions.length 去凑，
+       万一 data.js 里有一项写坏了被 allActions 过滤掉，那个减法就错了。 */
+    var mine = acts.filter(function (a) { return a.custom; });
+    var full = mine.length >= C.customMax;
+
+    if (!addingCustom) {
+      if (full) {
+        add(wrap, h('p', { class: 'action-add-note', text: T.fullMsg }));
+      } else {
+        var btn = h('button', {
+          class: 'btn action-add-btn', type: 'button', id: 'btn-add-action', text: T.openBtn
+        });
+        btn.addEventListener('click', function () {
+          addingCustom = true;
+          addMsg = '';
+          renderActions();
+          focusAddInput();
+        });
+        add(wrap, btn);
+      }
+      /* 上限那个数字只在 config.js 一处，这里拼进来 —— 文案里不许再写一个数字 */
+      add(wrap, h('p', { class: 'action-add-hint',
+        text: T.hint + ' ' + C.customMax + ' ' + T.hintUnit }));
+      return wrap;
+    }
+
+    /* ---- 展开状态 ---- */
+    var input = h('input', {
+      class: 'action-add-input', type: 'text', id: 'input-add-action',
+      maxlength: String(C.customTextMax), placeholder: T.placeholder,
+      'aria-label': '自己想加的一项行动'
+    });
+
+    function submit() {
+      var text = String(input.value || '').replace(/^\s+|\s+$/g, '');
+      /* 空的 / 只打了空格：**不提交、也不弹报错**，就在下面写一句人话。
+         少一个打断 —— 用户没填就是没填，不需要被教育。 */
+      if (!text) {
+        addMsg = T.emptyMsg;
+        renderActions();
+        focusAddInput();
+        return;
+      }
+      var taken = acts.map(function (a) { return a.id; });
+      var res = S.addCustomAction(text, R.customId(Date.now(), taken));
+      if (!res.ok) {
+        /* 存不下要**如实说**是哪一种原因，不能默默不生效 */
+        addMsg = res.reason === 'full' ? T.fullMsg : T.emptyMsg;
+        renderActions();
+        focusAddInput();
+        return;
+      }
+      addingCustom = false;
+      addMsg = '';
+      renderActions();
+      renderStats();   /* 分母变了，上面那张统计卡跟着变 —— 两处永远是同一个数 */
+    }
+
+    var ok = h('button', { class: 'btn btn-primary', type: 'button', id: 'btn-add-confirm', text: T.confirm });
+    ok.addEventListener('click', submit);
+
+    var cancel = h('button', { class: 'btn', type: 'button', id: 'btn-add-cancel', text: T.cancel });
+    cancel.addEventListener('click', function () {
+      addingCustom = false;
+      addMsg = '';
+      renderActions();
+    });
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); submit(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancel.click(); }
+    });
+
+    add(wrap, h('div', { class: 'action-add-row' }, input, ok, cancel));
+    add(wrap, h('p', { class: 'action-add-hint',
+      text: T.hint + ' ' + C.customMax + ' ' + T.hintUnit }));
+    if (addMsg) add(wrap, h('p', { class: 'action-add-msg', role: 'status', text: addMsg }));
+
+    return wrap;
   }
 
   /* 点完打卡后那条提示（Day 11 补）。
@@ -537,8 +690,17 @@
     return el;
   }
 
+  /* 「我的」里哪一天是展开着的（Day 14 加）。null = 全都收起。
+     ⚠️ 一次只记一天 —— PRD 6.6 定的「一次只展开一格」。
+     这个变量只属于界面状态，不进存储：刷新后收起是正常且想要的。 */
+  var openDayKey = null;
+
   /* 最近 N 天的小格子：每格一个方块，颜色越实表示那天完成得越多。
-     withHead=false 时不画自带的小标题（「我的」那页有自己的章节标题）。 */
+     withHead=false 时不画自带的小标题（「我的」那页有自己的章节标题）。
+
+     Day 14 加：格子**可以点**了。点一下就在下面**就地展开**那一天，
+     看当天具体做了什么 —— 以前只有一个数字，想知道上周三干了什么没任何入口。
+     ⚠️ 走的是「就地展开」，不是弹窗、也不是新页面（PRD 6.4 不许做弹窗）。 */
   function renderHistory(total, withHead) {
     var recent = R.recentDays(S.allDays(), todayKey(), C.historyDays);
     var sum = R.summary(recent, total);
@@ -554,18 +716,76 @@
     recent.forEach(function (d) {
       var state = d.count === 0 ? 'is-empty'
                 : (d.count >= total ? 'is-full' : 'is-part');
+      var isOpen = d.key === openDayKey;
+      var tip = d.key + ' 完成 ' + d.count + ' / ' + total + ' 项';
       var li = h('li', {
-        class: 'history-cell ' + state + (d.key === todayKey() ? ' is-today' : ''),
-        title: d.key + ' 完成 ' + d.count + ' / ' + total + ' 项',
-        'aria-label': d.key + ' 完成 ' + d.count + ' / ' + total + ' 项'
+        class: 'history-cell ' + state
+             + (d.key === todayKey() ? ' is-today' : '')
+             + (isOpen ? ' is-open' : ''),
+        /* 和行动项同一个做法：li 挂 role=button + tabindex，键盘能 Tab 到、回车能开 */
+        role: 'button', tabindex: '0',
+        'aria-expanded': isOpen ? 'true' : 'false',
+        title: tip,
+        'aria-label': tip + '，回车看当天做了什么'
       });
       add(li, h('span', { class: 'history-day', text: d.label }));
       add(li, h('span', { class: 'history-num', text: String(d.count) }));
+
+      function pick() {
+        /* 再点同一格 = 收起（同一个按钮管开和关）；点别的格 = 换成那一格。 */
+        openDayKey = (openDayKey === d.key) ? null : d.key;
+        renderMeHistory();
+      }
+      li.addEventListener('click', pick);
+      li.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+      });
+
       add(row, li);
     });
     add(wrap, row);
 
+    /* 展开的那一天，就地画在格子下面 */
+    if (openDayKey) add(wrap, renderDayDetail(openDayKey, total));
+
     return wrap;
+  }
+
+  /* 某一天的明细。数字和清单全部由 R.dayDetail() 现算 —— 页面不自己拼。 */
+  function renderDayDetail(key, total) {
+    var d = R.dayDetail(S.allDays(), key, allActions(), todayKey());
+    var box = h('div', { class: 'day-detail' });
+
+    add(box, h('p', { class: 'day-detail-head' },
+      h('b', { text: key }),
+      h('span', { class: 'day-detail-wd', text: ' 周' + d.weekday }),
+      h('span', { class: 'day-detail-count',
+        text: D.me.dayCountLead + ' ' + d.count + ' / ' + D.me.dayCountJoin + ' ' + d.total + ' ' + D.me.dayCountUnit })));
+
+    if (!d.done.length && !d.gone.length) {
+      add(box, h('p', { class: 'day-detail-empty', text: D.me.dayEmpty }));
+      return box;
+    }
+
+    var ul = h('ul', { class: 'day-detail-list' });
+    d.done.forEach(function (a) {
+      add(ul, h('li', { class: 'day-detail-item' },
+        h('span', { class: 'day-detail-box', text: '✓' }),
+        h('span', { class: 'day-detail-text', text: a.text })));
+    });
+    /* 记录里留着、但现在的列表里已经没有的项（一般是自定义项被删了）。
+       ⚠️ 照样列出来、照样算进上面那个数 ——
+       不许因为「查不到它叫什么」就把它悄悄抹掉，否则那天看起来会像少做了一项。
+       ⚠️ 这里**故意不显示那个 id**：`c1790764607332` 这种是给机器看的编号，
+       给人看等于一句黑话（第一版显示过，截图一看全是乱码感，删掉）。 */
+    d.gone.forEach(function (id) {
+      add(ul, h('li', { class: 'day-detail-item is-gone' },
+        h('span', { class: 'day-detail-box', text: '✓' }),
+        h('span', { class: 'day-detail-text', text: D.me.dayGone })));
+    });
+    add(box, ul);
+
+    return box;
   }
 
   /* ============================================================
@@ -878,19 +1098,24 @@
   }
 
   /* 打卡记录。7 天全是 0 的时候照样把格子画出来（「空」本身也是信息），
-     再补一句「接下来干什么」，别让人盯着一排 0 发呆。 */
+     再补一句「接下来干什么」，别让人盯着一排 0 发呆。
+
+     Day 14 加：格子可点，点开就地看那一天。上面补一句说明 ——
+     不写的话，没人会去点一个方块（他能看见的是「一个数字」，看不出能点）。 */
   function renderMeHistory() {
     var box = document.getElementById('me-history');
     if (!box) return;
     clear(box);
 
-    var total = D.actions.length;
+    var total = allActions().length;
     var recent = R.recentDays(S.allDays(), todayKey(), C.historyDays);
     var sum = R.summary(recent, total);
 
     add(box, h('div', { class: 'me-head' },
       h('h2', { class: 'me-title', text: D.me.hisTitle }),
       h('span', { class: 'me-count', text: sum.done + ' / ' + sum.possible + ' 项' })));
+
+    add(box, h('p', { class: 'me-hint', text: D.me.hisHint }));
 
     add(box, renderHistory(total, false));
 
