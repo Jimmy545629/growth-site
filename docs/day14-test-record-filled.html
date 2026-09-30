@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Day 14｜真实用户测试记录表（已填写）</title>
+<style>
+  /* 这一份要能直接截图 / 打印，所以强制走浅色底。 */
+  html, body { background: #fff; color: #111; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    font-size: 13px; line-height: 1.6;
+    margin: 0; padding: 18px 22px 30px;
+    max-width: 920px;
+  }
+  h1 { font-size: 19px; margin: 0 0 2px; }
+  .sub { color: #666; font-size: 12px; margin: 0 0 14px; }
+  h2 {
+    font-size: 14px; margin: 16px 0 6px; padding-bottom: 4px;
+    border-bottom: 2px solid #111;
+  }
+  .meta-line { display: flex; gap: 22px; flex-wrap: wrap; font-size: 12.5px; margin-bottom: 4px; }
+  .fill { font-weight: 700; border-bottom: 1px solid #111; padding: 0 3px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 4px; }
+  th, td { border: 1px solid #999; padding: 4px 7px; vertical-align: top; font-size: 12px; }
+  th { background: #f0f0f0; font-weight: 600; text-align: left; }
+  .quote { background: #fffdf2; border-left: 3px solid #d9a300; padding: 6px 12px; margin: 5px 0; }
+  .quote b { color: #8a6a00; }
+  .warn { border: 1px solid #c00; color: #a00; padding: 7px 11px; margin-top: 10px; font-weight: 600; }
+  .note { border: 1px solid #999; background: #f7f7f7; padding: 7px 11px; margin-top: 10px; }
+  .key { color: #a00; font-weight: 700; }
+  .miss { color: #a00; }
+  .foot { margin-top: 16px; font-size: 11.5px; color: #666; border-top: 1px dashed #bbb; padding-top: 6px; }
+  @media print {
+    body { padding: 0 10mm; font-size: 12px; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Day 14｜真实用户测试记录表（<span style="color:#c00">已填写</span>）</h1>
+<p class="sub">大学生成长网站 · 轻量可用性测试 · 目标：找出同伴卡在哪一步</p>
+
+<div class="meta-line">
+  <span><b>测试者</b>：<span class="fill">远程朋友 1 位（化名「朋友 A」）</span></span>
+  <span><b>日期</b>：<span class="fill">2026-09-30</span></span>
+</div>
+<div class="meta-line">
+  <span><b>设备</b>：<span class="fill">对方自己的手机</span></span>
+  <span><b>方式</b>：<span class="fill">远程（微信）</span></span>
+  <span><b>用时</b>：<span class="fill miss">未记录</span></span>
+</div>
+
+<h2>一、这次实际是怎么做的</h2>
+<table>
+  <tbody>
+    <tr><td style="width:26%"><b>网址</b></td><td>https://source-board.app.workbuddy.host/</td></tr>
+    <tr><td><b>怎么发的</b></td><td>微信把网址 + 一段说明（<code>Day14-发给朋友的话.txt</code>）整段发过去</td></tr>
+    <tr><td><b>他在哪打开的</b></td><td><b>他自己的手机</b>（所以「对方设备屏幕」名副其实）</td></tr>
+    <tr><td><b>他的使用方式</b></td><td><b>自行使用</b>，不是按五个任务逐条走 —— 用完之后把「想做但做不到的地方」反馈回来</td></tr>
+  </tbody>
+</table>
+
+<h2>二、反馈原文（Jimmy 转述）</h2>
+<div class="quote">
+  <b>反馈一（行动项写死了）</b><br>
+  「今日里面的今日自律行动只是固定的三点，可以改成以该三点为基础，可以添加其他计划；
+  另外其中第一条里面的 <b>阅读二十页 改成阅读十页</b>，降低行动难度。」
+</div>
+<div class="quote">
+  <b>反馈二（打卡记录点不开）</b><br>
+  「我的页面里面，<b>近七天打卡记录无法点进去具体查看做了什么</b>。
+  预期：点进某天打卡记录里面，可以查看当天做了什么，<b>要拥有记忆和查看功能</b>。」
+</div>
+<div class="note">
+  ⚠️ <b>上面两段是转述，不是对方逐字原话。</b>对方发来的原始微信消息<b class="miss">未留存</b>。
+  守则第 4 条要求「原话照抄」—— 这条<b>这次没做到</b>，如实记下。
+</div>
+
+<h2>三、五个任务的执行情况</h2>
+<div class="note" style="margin-top:4px">
+  <b>⚠️ 本次<b class="miss">未按清单逐条执行</b>。</b>对方是「自己用」，不是「按任务做」，
+  所以下面 5 行<b>没有逐条的观察记录</b>（这也意味着「他第一步点了哪」这类最有价值的数据这次没拿到）。
+  拿到的是<b>需求型反馈</b>：「我想做这件事，但页面上做不到」。
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:33%">任务</th>
+      <th style="width:17%">执行情况</th>
+      <th style="width:26%">观察到的 / 他说的</th>
+      <th style="width:12%">被提示</th>
+      <th style="width:12%">做成</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1　说清它是什么、给谁用</td>
+      <td class="miss">未记录</td>
+      <td class="miss">未记录</td>
+      <td class="miss">未记录</td>
+      <td class="miss">未记录</td>
+    </tr>
+    <tr>
+      <td>2　记住一件事（打卡）</td>
+      <td class="miss">未逐条执行</td>
+      <td>相关：反馈一 —— 他想记的是<b>自己的事</b>，页面只给 3 个写死的选项，加不了</td>
+      <td class="miss">未记录</td>
+      <td class="miss">未记录</td>
+    </tr>
+    <tr>
+      <td>3　收藏并找回来</td>
+      <td class="miss">未记录</td>
+      <td class="miss">未记录</td>
+      <td class="miss">未记录</td>
+      <td class="miss">未记录</td>
+    </tr>
+    <tr>
+      <td>4　找政策类内容</td>
+      <td class="miss">未记录</td>
+      <td class="miss">未记录</td>
+      <td class="miss">未记录</td>
+      <td class="miss">未记录</td>
+    </tr>
+    <tr>
+      <td>5　关掉重开，还在吗</td>
+      <td class="miss">未记录</td>
+      <td>相关：反馈二 —— 他想<b>回看某天做了什么</b>，那排格子点了没反应</td>
+      <td class="miss">未记录</td>
+      <td class="miss">未记录</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>四、结束必问四句</h2>
+<table>
+  <thead>
+    <tr><th style="width:44%">问题</th><th>他的回答</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>刚才有没有哪一步，你其实不知道下一步该点哪？</td><td class="miss">未问 / 未记录</td></tr>
+    <tr><td>如果只用一句话说这是个什么网站，你会怎么说？</td><td class="miss">未问 / 未记录</td></tr>
+    <tr><td>有哪个地方你觉得是坏的 / 不好用的？</td><td>见反馈一、二（转述）</td></tr>
+    <tr><td>你还会再来第二次吗？为什么？</td><td class="miss">未问 / 未记录 —— <b>这条最可惜</b></td></tr>
+  </tbody>
+</table>
+
+<h2>五、测完自己填三行</h2>
+<table>
+  <tbody>
+    <tr><td style="width:30%"><b>卡得最久的一步</b>是哪一步？</td>
+        <td><b>严格说不是「卡」</b> —— 是「<b>想做，但页面上没有那个入口</b>」：
+            想把行动项改成自己的（加不了）、想点开某天看做了什么（点不开）。</td></tr>
+    <tr><td><b>最像「功能坏了」</b>的是哪一处？</td>
+        <td>「我的」里那排<b>近 7 天格子</b> —— 看起来能点、点了没反应，最容易被当成坏了。</td></tr>
+    <tr><td>如果<b>只能修一条</b>，我修哪条？为什么？</td>
+        <td><b>按规则本应只修一条</b>（第八节：有人完全做不成某任务 → 优先修它）。
+            但 <b>Jimmy 明确选了「三条全做」</b>，属他批准的扩范围，已记在
+            <code>PRD.md</code> / <code>CHANGELOG.md</code> / <code>README.md</code> 三处。</td></tr>
+  </tbody>
+</table>
+
+<h2>六、③ 最小修复：改了什么（本日已做完并验证）</h2>
+<table>
+  <thead>
+    <tr><th style="width:32%">反馈</th><th style="width:32%">改之前</th><th>改之后</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>行动项写死</td><td>「今日」行动卡永远只有 3 项，改不了、加不了</td>
+        <td>默认 3 项不许删，另可自己加最多 10 项；点「+ 添加一项」<b>就地展开</b>一行输入框</td></tr>
+    <tr><td>阅读门槛高</td><td>「阅读 <b>20</b> 页」</td><td>「阅读 <b>10</b> 页」</td></tr>
+    <tr><td>记录点不开</td><td>「我的」里 7 个格子不可点，只看得到数字</td>
+        <td>点某天<b>就地展开</b>：日期 + 当天做了哪几项 + <code>完成 n / 共 m 项</code></td></tr>
+  </tbody>
+</table>
+<table>
+  <tbody>
+    <tr><td style="width:30%"><b>怎么证明能用</b></td>
+        <td>命令行 <b>62 / 62</b>（不开浏览器跑纯函数）；真机 <b>72 / 72</b>
+            （CDP 驱动真 Edge：真鼠标点击、真刷新、真关掉浏览器重开）</td></tr>
+    <tr><td><b>截图</b></td>
+        <td>桌面 <code>Day14-改动验证截图/</code> 5 张，每张都亲眼看过。
+            其中 <code>day14-03-gone-item-kept</code> 证明
+            「<b>删掉一项后那天的完成数仍然是 2</b>」</td></tr>
+  </tbody>
+</table>
+
+<div class="warn">
+  今天的红线：不改版、不一口气全改。<b>本次例外</b> —— Jimmy 明确选了「三条全做」（他批准的扩范围）。
+</div>
+
+<div class="note">
+  <b>本次测试的三个缺口（如实记，不补）</b>：<br>
+  ① 对方发来的<b>原始截图</b>未存进项目（训练营要的「对方设备屏幕」现场图在 Jimmy 手上）；
+  ② 对方的<b>逐字原话</b>未留存，第二节是转述；
+  ③ <b>结束四问</b>未问，尤其「还会再来第二次吗」没问到。<br>
+  ➜ 因此测试方案文档第七节那四个「可疑卡点」<b>至今仍是预判，一条都没被验证</b>，不许当成结果用。
+</div>
+
+<p class="foot">
+  Day 14 · 大学生成长网站 · growth-site ｜ 完整过程见仓库 <code>docs/day14-usability-test.md</code> 第六节<br>
+  空白模板见 <code>docs/day14-test-record-sheet.html</code>（供下次测试打印使用）
+</p>
+
+</body>
+</html>
