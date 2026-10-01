@@ -239,6 +239,7 @@
       renderStats();
       renderQuote();
       renderActions();
+      renderDailyRead();   /* Day 15：今日一篇 */
     } else if (id === 'library') {
       renderLibraryHead();
       renderLibraryDemo();
@@ -978,8 +979,15 @@
 
     add(body, h('p', { class: 'entry-title', text: it.title }));
 
-    /* 一行小字：标签 + 来源/人物 + 时间 */
+    /* 一行小字：形态徽标 + 标签 + 来源/人物 + 时间 */
     var meta = h('div', { class: 'entry-meta' });
+    /* ⚠️ 形态徽标要画（Day 15，F13）——
+       在这之前，页面上**根本看不出「这条是视频还是文章」**，
+       可是一条 30 秒的视频和一篇 8 分钟的文章，花的时间差十几倍。
+       徽标上的字由 rules.js 的 mediaBadge() 算：
+       有 dur 就是「文章 · 约 6 分钟」，没有就只写「文章」；
+       media 认不出来时回落到「文章」，**不报错、也不印 undefined**。 */
+    add(meta, h('span', { class: 'media-badge' }, R.mediaBadge(it)));
     add(meta, Tag(it.tag, it.tagColor));
     if (it.person) {
       add(meta, h('span', { class: 'entry-person', text: it.person + ' · ' + it.role }));
@@ -1122,6 +1130,106 @@
     if (sum.done === 0) {
       add(box, h('p', { class: 'state-hint', style: { 'text-align': 'left' }, text: D.me.hisEmptyHint }));
     }
+  }
+
+  /* ============================================================
+     七·B、视图一「今日」的「今日一篇」（Day 15 加，C 方案）
+     ============================================================
+     一天只推**一条**长内容，读完就算今天过完。
+
+     为什么不做成「内容库」里的第 4 条列表：
+     长内容如果只加进那三列里，它会立刻变成第 4 个「收藏夹黑洞」——
+     一篇要读 8 分钟的文章混在一堆 30 秒视频里，手会自己划过去。
+     所以节奏跟「今日语录」一样：**每天只给你今天这一份。** */
+
+  function renderDailyRead() {
+    var box = document.getElementById('daily-read');
+    if (!box) return;
+    clear(box);
+
+    var T = D.dailyRead || {};
+
+    /* 今天该推哪一篇**由日期决定**（rules.js 的 pickDaily）——
+       同一天刷新多少次、切走视图再切回来，都是同一篇；第二天自动换下一篇。
+       ⚠️ 不许用 Math.random()：随机会让「今天这篇」自己变，
+       用户会以为是自己记错了，而且随机的东西没法写测试。 */
+    var one = R.pickDaily(D.reads, todayKey());
+
+    /* 池子空了 → **整张卡不画**（不是画一个空壳）。
+       空壳会让人以为页面坏了，这跟「列表四种状态」是同一条道理。 */
+    if (!one) return;
+
+    var card = h('article', { class: 'daily-read-card', 'aria-label': T.kicker });
+
+    /* 卡头：标题 + 形态徽标 + 示例内容标记 */
+    var head = h('div', { class: 'dr-head' });
+    add(head, h('p', { class: 'dr-kicker', text: T.kicker }));
+    add(head, h('span', { class: 'media-badge' }, R.mediaBadge(one)));
+    /* ⚠️ 「示例内容」这一格不能省：
+       现在池子里全是示例，不写这一句，看的人会以为已经是真实收录了。 */
+    add(head, h('span', { class: 'dr-sample', text: '示例内容' }));
+    add(card, head);
+
+    add(card, h('p', { class: 'dr-lead', text: T.lead }));
+    add(card, h('h3', { class: 'dr-title', text: one.title }));
+    add(card, h('p', { class: 'dr-origin' },
+      h('span', { class: 'dr-origin-label', text: '来源：' }),
+      one.origin));
+
+    /* 摘要：挂一个「本站提炼」的小标记，别让人以为是原文 */
+    add(card, h('p', { class: 'dr-summary' },
+      h('span', { class: 'dr-mine', text: T.mineLabel }),
+      h('span', { text: one.summary })));
+
+    if (one.points && one.points.length) {
+      var pl = h('ul', { class: 'dr-points' });
+      one.points.forEach(function (p) { add(pl, h('li', { text: p })); });
+      add(card, h('div', { class: 'dr-points-wrap' },
+        h('p', { class: 'dr-sub', text: T.pointsTitle }),
+        pl));
+    }
+
+    if (one.use) {
+      add(card, h('p', { class: 'dr-use' },
+        h('b', { text: T.useLabel }),
+        h('span', { text: one.use })));
+    }
+
+    /* 动作区：「读完了」+（有链接时）「去读原文」 */
+    var acts = h('div', { class: 'dr-acts' });
+
+    var read = S.hasRead(one.id);
+    var btnDone = h('button', {
+      class: 'btn btn-primary' + (read ? ' is-on' : ''),
+      type: 'button', id: 'btn-read-done',
+      text: read ? T.doneText : T.doneBtn,
+      'aria-pressed': read ? 'true' : 'false'
+    });
+    btnDone.addEventListener('click', function () {
+      /* ⚠️ 先写存储，再重画 —— 顺序反了就是「屏幕上变了、其实没存住」。
+         Day 12 收藏那边踩过这个坑，这里照同一条规矩走。 */
+      S.toggleRead(one.id);
+      renderDailyRead();
+    });
+    add(acts, btnDone);
+
+    /* ⚠️ 没有 url 时**不许留一个点了没反应的按钮**（AC-45）——
+       编一个假链接比没有链接更糟：那是硬约束 C4 里说的「编造」。 */
+    if (one.url) {
+      add(acts, h('a', {
+        class: 'btn', href: one.url,
+        target: '_blank', rel: 'noopener noreferrer',
+        text: T.readBtn
+      }));
+    }
+    add(card, acts);
+
+    if (!one.url) {
+      add(card, h('p', { class: 'dr-nolink', text: T.noLink }));
+    }
+    add(card, h('p', { class: 'dr-undo', text: T.undoHint }));
+
+    add(box, card);
   }
 
   /* ============================================================

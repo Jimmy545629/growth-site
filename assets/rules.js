@@ -254,6 +254,123 @@
   }
 
   /* ------------------------------------------------------------
+     四·C、内容形态徽标（Day 15 加）
+     ------------------------------------------------------------
+     为什么这两件事在 rules.js 而不是 app.js：
+     「这条是视频还是文章」「徽标上该写什么字」是**算**出来的，
+     不是画出来的。放这里就能不开浏览器直接跑测试。 */
+
+  /* 取一条内容的形态键。
+     ⚠️ 认不出来的值（空、数字、拼错的字、字段整个没有）一律回落到
+     C.mediaDefault —— 不许因为这个让页面报错，也不许在页面上印出
+     「undefined」这种东西。 */
+  function mediaKey(item) {
+    var m = (item && typeof item === 'object') ? item.media : '';
+    var list = C.media || {};
+    if (typeof m === 'string' && list[m]) return m;
+    return C.mediaDefault || 'article';
+  }
+
+  /* 洗一下时长 / 长度（'12:30' / '约 8 分钟' / '42 分钟'） */
+  function cleanDur(dur) {
+    if (typeof dur !== 'string') return '';
+    return dur.replace(/^\s+|\s+$/g, '').slice(0, 12);
+  }
+
+  /* 徽标上那一行字：有 dur 就是 '文章 · 约 8 分钟'，没有就只写 '文章'。
+     ⚠️ 没有 dur 时**不许留一个孤零零的间隔号** —— 那是没做完的样子。 */
+  function mediaBadge(item) {
+    var k = mediaKey(item);
+    var def = (C.media && C.media[k]) || { label: '文章' };
+    var dur = cleanDur(item && item.dur);
+    return dur ? def.label + ' · ' + dur : def.label;
+  }
+
+  /* ------------------------------------------------------------
+     四·D、「今日一篇」（Day 15 加）
+     ------------------------------------------------------------ */
+
+  /* 洗一篇「今日一篇」的候选。
+     跟 cleanCustom 同一个态度：读回来的东西不假设它长得对，
+     缺 id / 缺标题的一律丢掉，要点最多留 5 条。 */
+  function cleanRead(item) {
+    if (!item || typeof item !== 'object') return null;
+
+    var id = (typeof item.id === 'string') ? item.id.replace(/\s+/g, '') : '';
+    var title = (typeof item.title === 'string')
+      ? item.title.replace(/^\s+|\s+$/g, '') : '';
+    if (!id || !title) return null;
+
+    var points = [];
+    if (Object.prototype.toString.call(item.points) === '[object Array]') {
+      for (var i = 0; i < item.points.length && points.length < 5; i++) {
+        var p = item.points[i];
+        if (typeof p !== 'string') continue;
+        p = p.replace(/^\s+|\s+$/g, '');
+        if (p) points.push(p);
+      }
+    }
+
+    return {
+      id: id,
+      title: title,
+      media: mediaKey(item),
+      dur: cleanDur(item.dur),
+      tag: (typeof item.tag === 'string') ? item.tag : '',
+      /* ⚠️ url 允许是空字符串 —— 那就表示「原链接还没填」，
+         页面上会**如实写出来**，不许编一个网址顶上。 */
+      url: (typeof item.url === 'string') ? item.url.replace(/^\s+|\s+$/g, '') : '',
+      origin: (typeof item.origin === 'string') ? item.origin : '',
+      summary: (typeof item.summary === 'string') ? item.summary : '',
+      points: points,
+      use: (typeof item.use === 'string') ? item.use : ''
+    };
+  }
+
+  function cleanReads(list) {
+    if (Object.prototype.toString.call(list) !== '[object Array]') return [];
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var r = cleanRead(list[i]);
+      if (!r) continue;
+      if (seen[r.id]) continue;      /* 同一个 id 出现两次，只留第一份 */
+      seen[r.id] = true;
+      out.push(r);
+    }
+    return out;
+  }
+
+  /* 这天是「起算日之后的第几天」。
+     ⚠️ 算法说明：两端都取**本地时间的当天 00:00** 再相减，
+     这样白天黑夜都不影响结果（不会因为晚上打开就差一天）。
+     不用 toISOString —— 那个按 UTC 算，中国比它早 8 小时，
+     晚上 8 点以后会算出「明天」（AGENTS.md 第 4 条第 8 项）。 */
+  function dayNumber(key, epochKey) {
+    var epoch = fromKey(epochKey || C.readEpoch || '2026-01-01');
+    var d = fromKey(key);
+    return Math.round((d.getTime() - epoch.getTime()) / 86400000);
+  }
+
+  /* 今天该推哪一篇。三条必须守住的点：
+
+     1. **确定性** —— 同一天刷新一百次都必须是同一篇。
+        ⚠️ 所以**不许用 Math.random()**：随机会让「今天这篇」自己变，
+        用户会以为是自己记错了；而且随机的东西**没法写测试**。
+     2. **按顺序轮换** —— 顺着列表往下走，不是哈希打散。
+        这样不会出现「连着三天推同一篇」。
+     3. **负数也要对** —— 把系统日期拨到起算日之前时，
+        JS 的 % 会给出负数，直接当数组下标会取到 undefined。
+        所以补一次 `+ arr.length`（这是取模运算的标准写法）。 */
+  function pickDaily(list, key, epochKey) {
+    var arr = cleanReads(list);
+    if (!arr.length) return null;
+    var n = dayNumber(key, epochKey);
+    var i = ((n % arr.length) + arr.length) % arr.length;
+    return arr[i];
+  }
+
+  /* ------------------------------------------------------------
      五、视图地址（Day 13 加）
      ------------------------------------------------------------
      为什么这三个函数放在 rules.js 而不是 app.js：
@@ -319,6 +436,14 @@
     allActions: allActions,
     customId: customId,
     dayDetail: dayDetail,
+    /* Day 15 加：内容形态徽标 / 今日一篇 */
+    mediaKey: mediaKey,
+    cleanDur: cleanDur,
+    mediaBadge: mediaBadge,
+    cleanRead: cleanRead,
+    cleanReads: cleanReads,
+    dayNumber: dayNumber,
+    pickDaily: pickDaily,
     /* Day 13 加 */
     viewKey: viewKey,
     viewIdFromHash: viewIdFromHash,

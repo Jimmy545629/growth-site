@@ -66,6 +66,13 @@
           <aside class="action-card" id="action-card" aria-label="今日自律行动"></aside>
         </section>
 
+        <!-- 今日一篇（Day 15 加）：一天只推一条长内容，读完算今天过完。
+             ⚠️ 它跟上面的语录卡不是一回事 —— 语录是「一句话」，
+             这里是「一篇要花几分钟读完的东西」。放这一层是故意的：
+             **不抢首屏**（首屏留给今天该做的那三件事）。
+             候选池为空时，app.js 会**整块不画**，不留空壳。 -->
+        <section class="daily-read" id="daily-read" aria-label="今日一篇"></section>
+
       </section>
 
       <!-- ---------- 视图二：内容库 ---------- -->

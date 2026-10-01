@@ -743,6 +743,25 @@ body {
 .entry-meta .sep { opacity: .5; }
 .entry-person { color: var(--ink-soft); }
 
+/* ---------- 内容的形态徽标（Day 15 加，F13） ----------
+   「这条是视频 / 文章 / 播客 / 长访谈」在页面上**只有这一个出口**。
+   没有它，所有条目长得一模一样，用户分不出「点进去读 8 分钟」
+   还是「看 30 秒」—— 这两件事花的时间差了十几倍。
+
+   故意用中性色（不用彩色）：彩色标签在这个页面上表示「内容属于哪个分类」，
+   形态是另一回事（阅读成本），两者混成一个颜色就都看不清了。 */
+.media-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .03);
+  color: var(--ink-soft);
+  font-size: var(--fs-4);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
 .entry-extra {
   margin: var(--sp-3) 0 0;
   font-size: var(--fs-4);
@@ -952,6 +971,99 @@ body {
 .quote-more { margin: var(--sp-4) 0 0; font-size: var(--fs-4); color: var(--ink-faint); }
 .quote-more a { color: var(--warm); }
 
+/* ============================================================
+   今日一篇（Day 15 加，F14）
+   ------------------------------------------------------------
+   视觉上要跟上面的语录卡**明显不同**（所以换成了绿色系）：
+   语录是「一句话」，这里是「一篇要花几分钟读完的东西」。
+   两者长得一样，用户会以为这也是一眼就能扫过去的。
+   ============================================================ */
+.daily-read { margin-bottom: var(--sp-7); }
+
+.daily-read-card {
+  padding: var(--sp-6);
+  border-radius: var(--radius);
+  border: 1px solid rgba(52, 211, 153, 0.26);
+  background:
+    linear-gradient(180deg, rgba(52, 211, 153, .08), rgba(52, 211, 153, .015)),
+    var(--card);
+}
+
+.dr-head {
+  display: flex; align-items: center; gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+.dr-kicker {
+  margin: 0;
+  font-size: var(--fs-4);
+  color: var(--ink-faint);
+  letter-spacing: 1px;
+}
+/* 「示例内容」标记。现在池子里全是示例 —— 不标出来，
+   看的人会以为这已经是真实收录的内容了（这是诚实问题，不是排版问题）。 */
+.dr-sample {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px dashed rgba(255, 179, 71, .5);
+  color: var(--warm);
+  font-size: var(--fs-4);
+  line-height: 1.5;
+}
+
+.dr-lead { margin: 0 0 var(--sp-4); font-size: var(--fs-4); color: var(--ink-faint); }
+.dr-title { margin: 0 0 var(--sp-2); font-size: var(--fs-2); color: var(--ink); line-height: 1.4; }
+.dr-origin { margin: 0 0 var(--sp-4); font-size: var(--fs-4); color: var(--ink-faint); }
+.dr-origin-label { opacity: .7; }
+
+.dr-summary {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-3);
+  color: var(--ink-soft);
+  line-height: 1.75;
+}
+/* 「本站提炼」标记 —— 提醒读者这不是原文（硬约束 C4） */
+.dr-mine {
+  display: inline-block;
+  margin-right: var(--sp-2);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .05);
+  color: var(--ink-faint);
+  font-size: var(--fs-4);
+}
+
+.dr-points-wrap { margin-bottom: var(--sp-4); }
+.dr-sub { margin: 0 0 var(--sp-2); font-size: var(--fs-4); color: var(--ink-faint); }
+.dr-points {
+  margin: 0;
+  padding-left: var(--sp-5);
+  font-size: var(--fs-3);
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+.dr-points li { margin-bottom: 2px; }
+
+.dr-use {
+  margin: 0 0 var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--ok);
+  background: rgba(52, 211, 153, .06);
+  font-size: var(--fs-3);
+  color: var(--ink);
+  line-height: 1.7;
+}
+.dr-use b { color: var(--ok); margin-right: var(--sp-2); }
+
+.dr-acts { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+
+/* url 是空的时候，这里是**一句实话**，不是一个点了没反应的按钮（AC-45） */
+.dr-nolink { margin: var(--sp-3) 0 0; font-size: var(--fs-4); color: var(--warm); }
+.dr-undo { margin: var(--sp-3) 0 0; font-size: var(--fs-4); color: var(--ink-faint); }
+
 /* ---------- 窄屏 ---------- */
 @media (max-width: 960px) {
   .hero { grid-template-columns: 1fr; }
@@ -968,6 +1080,7 @@ body {
   .tab { padding: 0 var(--sp-4); }
   .demo-row { grid-template-columns: 1fr; }
   .me-head { flex-wrap: wrap; }
+  .daily-read-card { padding: var(--sp-5); }
 }
 
 /* 用户在系统里开了「减少动态效果」，就把过渡和动画都关掉。

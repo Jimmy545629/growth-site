@@ -22,6 +22,7 @@
   var memoryData = null;
   var memoryFav = null;
   var memoryCustom = null;   /* Day 14：自己添加的行动项（存不住时的兜底） */
+  var memoryRead = null;     /* Day 15：今日一篇的已读记录（存不住时的兜底） */
 
   var probed = false;      /* 有没有试过 localStorage 能不能用 */
   var usable = false;      /* 试的结果 */
@@ -173,6 +174,48 @@
     }
   }
 
+  /* ---------- 今日一篇的已读记录：第四只抽屉（Day 15 加） ----------
+     结构还是跟上面三只一模一样：读坏了、版本对不上、存不住，
+     一律按「空」处理，绝不让它把整个页面搞报错。
+
+     存的是 { version, ids: ['jobs-stanford-2005', ...] } ——
+     **只存篇目 id**，不存「哪一天读的」。
+     为什么：一篇好文章读过了就是读过了，一年后再次轮到它，
+     页面上应该仍然认得「你已经读过」。 */
+
+  function blankRead() {
+    return { version: C.readSchemaVersion, ids: [] };
+  }
+
+  function readRead() {
+    var s = storage();
+    if (!s) return memoryRead || (memoryRead = blankRead());
+
+    var raw = null;
+    try { raw = s.getItem(C.readKey); } catch (e) { return blankRead(); }
+    if (!raw) return blankRead();
+
+    var data = null;
+    try { data = JSON.parse(raw); } catch (e) { return blankRead(); }
+
+    if (!data || typeof data !== 'object') return blankRead();
+    if (data.version !== C.readSchemaVersion) return blankRead();
+    /* ids 用 rules.js 那个清洗函数过一遍：去掉重复和非字符串 */
+    return { version: C.readSchemaVersion, ids: R.cleanIds(data.ids) };
+  }
+
+  function writeRead(data) {
+    var s = storage();
+    if (!s) { memoryRead = data; return false; }
+    try {
+      s.setItem(C.readKey, JSON.stringify(data));
+      return true;
+    } catch (e) {
+      memoryRead = data;
+      return false;
+    }
+  }
+
   /* ---------- 对外 ---------- */
   window.GROWTH_STORE = {
 
@@ -265,6 +308,25 @@
       return left;
     },
 
+    /* ---------- 今日一篇的已读记录（Day 15 加） ---------- */
+
+    /* 读过的篇目 id 数组，顺序 = 读的先后顺序 */
+    getReadIds: function () { return readRead().ids; },
+
+    hasRead: function (id) { return readRead().ids.indexOf(id) >= 0; },
+
+    countReads: function () { return readRead().ids.length; },
+
+    /* 点一下：标记读完 / 撤销读完。返回「操作完是不是已读」 */
+    toggleRead: function (id) {
+      var ids = readRead().ids.slice();
+      var at = ids.indexOf(id);
+      if (at >= 0) ids.splice(at, 1);
+      else ids.push(id);
+      writeRead({ version: C.readSchemaVersion, ids: R.cleanIds(ids) });
+      return at < 0;
+    },
+
     /* 清空全部记录。界面上没有入口，只给验证脚本用。 */
     clearAll: function () {
       var s = storage();
@@ -272,10 +334,12 @@
         try { s.removeItem(C.storeKey); } catch (e) {}
         try { s.removeItem(C.favKey); } catch (e) {}
         try { s.removeItem(C.customKey); } catch (e) {}
+        try { s.removeItem(C.readKey); } catch (e) {}
       }
       memoryData = null;
       memoryFav = null;
       memoryCustom = null;
+      memoryRead = null;
     }
 
   };
