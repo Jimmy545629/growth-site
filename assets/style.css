@@ -1064,6 +1064,140 @@ body {
 .dr-nolink { margin: var(--sp-3) 0 0; font-size: var(--fs-4); color: var(--warm); }
 .dr-undo { margin: var(--sp-3) 0 0; font-size: var(--fs-4); color: var(--ink-faint); }
 
+/* ============================================================
+   今日热点（Day 17 加，F15）
+   ------------------------------------------------------------
+   ⚠️ 刻意跟上面所有卡片都**不一样**：这一块是**真实数据**，
+   不是示例内容。用一套中性的、偏「数据/清单」的样子（左侧一条竖线 +
+   等宽名次），让人一眼看出这不是排版演示，是真从云端读来的东西。
+   放在「今日一篇」下面，不抢首屏 —— 首页主角永远是行动。
+   ============================================================ */
+.hot { margin-bottom: var(--sp-7); }
+
+.hot-card {
+  padding: var(--sp-6);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  background: var(--card);
+}
+/* 读不到的时候整块变灰，不去抢注意力，但也不消失（消失了用户会以为没这功能） */
+.hot-card.is-fail {
+  border-left-color: var(--ink-faint);
+  background: var(--bg-soft);
+}
+
+.hot-head {
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+.hot-title {
+  margin: 0;
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+/* 「榜单日期」这一格是真实性的关键：不写日期，
+   看的人分不清这是刚抓的还是昨天的。所以给它一点存在感（主色）。 */
+.hot-date {
+  font-size: var(--fs-4);
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+}
+.hot-loading {
+  font-size: var(--fs-4);
+  color: var(--ink-faint);
+}
+/* 「你指定了 N 条」这个标记（Day 17 余力加练）。
+   故意做得比日期淡、比加载字显眼一点 ——
+   它是「你这次的操作」的回声，不是内容本身，不该抢标题的注意力。 */
+.hot-param {
+  font-size: var(--fs-4);
+  color: var(--ink-soft);
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.hot-list {
+  list-style: none;
+  margin: 0; padding: 0;
+}
+.hot-row {
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  gap: var(--sp-3);
+  align-items: baseline;
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--line-soft);
+}
+.hot-row:first-child { border-top: none; padding-top: 0; }
+
+.hot-rank {
+  font-size: var(--fs-4);
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+/* 前 3 名给一点颜色，方便一眼看到头条 */
+.hot-row:nth-child(1) .hot-rank { color: var(--warm); font-weight: 700; }
+.hot-row:nth-child(2) .hot-rank,
+.hot-row:nth-child(3) .hot-rank { color: var(--warm); }
+
+.hot-text { font-size: var(--fs-3); line-height: 1.5; }
+.hot-link {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color .15s;
+}
+.hot-link:hover { border-bottom-color: var(--brand); }
+/* 摘要：比标题小一号、淡一档，明确是补充信息而不是主标题 */
+.hot-desc {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-4);
+  color: var(--ink-soft);
+}
+
+.hot-value {
+  font-size: var(--fs-4);
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 骨架屏：加载中先占好位，免得一片空白让人以为这里本来就没内容 */
+.hot-skeleton {
+  display: inline-block;
+  height: 12px;
+  border-radius: 4px;
+  background: var(--line);
+  animation: hotPulse 1.4s ease-in-out infinite;
+}
+.hot-row.is-skeleton .hot-skeleton:first-child { width: 14px; }
+.hot-row.is-skeleton .hot-skeleton:last-child { width: 100%; }
+@keyframes hotPulse {
+  0%, 100% { opacity: .45; }
+  50%      { opacity: .85; }
+}
+
+.hot-fail-msg {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-3);
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.hot-src {
+  margin: var(--sp-4) 0 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--fs-4);
+  color: var(--ink-faint);
+}
+.hot-src .sep { margin: 0 var(--sp-2); }
+
 /* ---------- 窄屏 ---------- */
 @media (max-width: 960px) {
   .hero { grid-template-columns: 1fr; }
@@ -1081,6 +1215,10 @@ body {
   .demo-row { grid-template-columns: 1fr; }
   .me-head { flex-wrap: wrap; }
   .daily-read-card { padding: var(--sp-5); }
+  .hot-card { padding: var(--sp-5); }
+  /* 小屏上热度值挤不下 → 收到标题下面一行 */
+  .hot-row { grid-template-columns: 22px 1fr; }
+  .hot-value { grid-column: 2; }
 }
 
 /* 用户在系统里开了「减少动态效果」，就把过渡和动画都关掉。

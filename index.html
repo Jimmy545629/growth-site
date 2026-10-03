@@ -73,6 +73,12 @@
              候选池为空时，app.js 会**整块不画**，不留空壳。 -->
         <section class="daily-read" id="daily-read" aria-label="今日一篇"></section>
 
+        <!-- 今日热点（Day 17 加）：真实热搜，数据来自云端数据库。
+             ⚠️ 它是**真实数据**，不是示例——所以这块**不带**「示例内容」标记，
+             而是如实标出「哪一天的榜单」和「数据来源」。
+             读不到时（断网 / 云端异常）整块显示一句实话，不假装有内容。 -->
+        <section class="hot" id="hot" aria-label="今日热点"></section>
+
       </section>
 
       <!-- ---------- 视图二：内容库 ---------- -->
@@ -110,11 +116,30 @@
 
   </div>
 
-  <!-- 加载顺序不能换：后面每个文件一开头就要用前面那个 -->
-  <script src="assets/config.js"></script>  <!-- 所有常量 -->
-  <script src="assets/rules.js"></script>   <!-- 所有「算」的逻辑（纯函数） -->
-  <script src="assets/store.js"></script>   <!-- 所有数据读写（唯一碰 localStorage 的文件） -->
-  <script src="assets/data.js"></script>    <!-- 所有内容（含三个视图的名字与说明） -->
-  <script src="assets/app.js"></script>     <!-- 画到页面上 + 收点击 + 按地址切换视图 -->
+  <!-- 加载顺序不能换：后面每个文件一开头就要用前面那个。
+       云端 SDK（Day 17 加）必须排在 cloud.js 前面 —— cloud.js 要用它挂出来的
+       window.WorkBuddyCloud。用 CDN 而不是装包，是因为本项目纯静态、零构建
+       （PRD 硬约束 C2）：引 npm 包就要多一个构建步骤，对「双击就能跑」是破坏。
+
+       ⚠️ 踩坑记录 3（Day 17，线上实测）—— 这个最阴：
+       原来在每个脚本标签**后面**跟了一小段行尾注释，结果**线上整页 JS 全不执行**
+       （页面只剩空骨架），本地却看着正常。原因是浏览器把那段行尾注释的开头
+       当成了脚本内容的一部分，把后面的标签结构全吞掉了。
+       —— 教训：**注释一律写在脚本标签外面**，绝不要跟在它后面。
+       这个坑只有「真开浏览器跑一遍线上」才看得见，规则层测不出来。 -->
+  <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+
+  <!-- 所有常量 -->
+  <script src="assets/config.js"></script>
+  <!-- 所有云端读写（唯一碰云端的文件） -->
+  <script src="assets/cloud.js"></script>
+  <!-- 所有「算」的逻辑（纯函数） -->
+  <script src="assets/rules.js"></script>
+  <!-- 所有数据读写（唯一碰 localStorage 的文件） -->
+  <script src="assets/store.js"></script>
+  <!-- 所有内容（含三个视图的名字与说明） -->
+  <script src="assets/data.js"></script>
+  <!-- 画到页面上 + 收点击 + 按地址切换视图 -->
+  <script src="assets/app.js"></script>
 </body>
 </html>

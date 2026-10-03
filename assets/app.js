@@ -27,6 +27,7 @@
   var R = window.GROWTH_RULES;
   var S = window.GROWTH_STORE;
   var D = window.GROWTH_DATA;
+  var G = window.GROWTH_CLOUD;   /* Day 17：所有云端读写都在 cloud.js，这里只是用它的结果 */
 
   /* 打卡是打在「今天」上的。但页面可能开着过夜（跨过零点），
      所以每次要用的时候现算一次，不在一开始缓存下来。 */
@@ -240,6 +241,7 @@
       renderQuote();
       renderActions();
       renderDailyRead();   /* Day 15：今日一篇 */
+      renderHot();         /* Day 17：今日热点（真实热搜，从云端读） */
     } else if (id === 'library') {
       renderLibraryHead();
       renderLibraryDemo();
@@ -255,19 +257,37 @@
      真正的依据永远是地址栏，见 onRouteChange()。 */
   var currentView = null;
 
+  /* ⚠️ 光记「哪个视图」不够（Day 17 余力加练踩到的）：
+     地址从 '#/home' 改成 '#/home?hot=3' 时，视图还是 home，
+     如果只看视图名就直接 return，页面上那 8 条根本不会变成 3 条 ——
+     地址变了、页面没动，看起来就像「这个参数没用」。
+     → 所以缓存要连**和显示有关的参数**一起记，两个都相同才敢跳过重画。 */
+  var currentHot = null;
+
   function onRouteChange() {
     var id = R.viewIdFromHash(location.hash, D.views, C.route);
-    var canonical = hashOf(id);
+    var hot = R.hotLimitFromHash(location.hash, C.hot.limit, C.hot.limitMax);
 
-    /* 地址认不出来（空的 / 手打错一个字母）→ 把地址栏纠正成默认视图的地址。
-       用 location.replace：不往历史里多塞一条，用户按「返回」不会退回错地址。
-       万一改不动（比如本地 file:// 下被浏览器拦），也不要紧 —— 页面照样能看。 */
-    if (location.hash !== canonical) {
-      try { location.replace(canonical); } catch (e) { /* 忽略：改不了地址不影响看页面 */ }
+    /* ⚠️⚠️ 这里**不能**直接拿 hashOf(id) 去和 location.hash 比（Day 17 余力加练踩到）。
+       因为 hashOf(id) 只会给出 '#/home'，而地址里可能带着 '?hot=3' ——
+       一比就「不相等」，于是 location.replace 会把用户写的参数**抹掉**。
+       表现就是：你输 ?hot=3，页面闪一下又变回 8 条，参数像没生效过。
+       → 正确做法：**只把认不出来的部分纠正掉** ——
+         认得出视图 id 就把参数原样保留，认不出才回默认地址。 */
+    var wantKey = R.viewKey(location.hash);
+    var known = false;
+    for (var i = 0; i < D.views.length; i++) {
+      if (String(D.views[i].id).toLowerCase() === wantKey) { known = true; break; }
+    }
+    if (!known) {
+      try { location.replace(hashOf(id)); } catch (e) { /* 忽略：改不了地址不影响看页面 */ }
     }
 
-    if (id === currentView) return;   /* 同一个视图，不用重画 */
+    /* ⚠️ 这里**不能**因为「视图没变」就提前 return：还要比 hot 参数 ——
+       见上面 currentHot 的注释。 */
+    if (id === currentView && hot === currentHot) return;
     currentView = id;
+    currentHot = hot;
     showView(id);
     enterView(id);
   }
@@ -1230,6 +1250,167 @@
     add(card, h('p', { class: 'dr-undo', text: T.undoHint }));
 
     add(box, card);
+  }
+
+  /* ============================================================
+     七之二、今日热点（Day 17 加）
+     ============================================================
+     这是**页面上第一块真正的云端数据**：条目来自云端数据库的 hot_topics 表，
+     由 db/sync-hot.mjs 每天从公开热搜接口抓一次写进去。
+
+     ⚠️ 三个「不许」：
+     ① 不许把读不到悄悄吞掉 —— 读不到就如实说，绝不编数据顶上（PRD C4）。
+     ② 不许在这里直接写 fetch 或拼云端地址 —— 所有云端逻辑在 cloud.js，
+        这个函数只管「把拿到的画出来」。
+     ③ 不许给它挂「示例内容」标记 —— 它是真实的，跟上面那些示例内容不是一回事；
+        但必须如实标出「哪一天的榜单」和「来源」，让人能自己去核对。 */
+  /* limit 从哪来：地址里的 '?hot=N'（Day 17 余力加练）。
+     没写就用 config.js 里那个默认条数；写坏了也回默认。 */
+  function hotLimit() {
+    return R.hotLimitFromHash(location.hash, C.hot.limit, C.hot.limitMax);
+  }
+
+  function renderHot() {
+    var box = document.getElementById('hot');
+    if (!box) return;
+    clear(box);
+
+    var T = (D.hot || {});
+    var n = hotLimit();
+
+    /* 加载中：先把骨架画出来，别让页面在这一块空着。
+       云端请求再快也有个来回，留白会让人以为「这里本来就没东西」。 */
+    var card = h('article', { class: 'hot-card', 'aria-label': T.title });
+    var head = h('div', { class: 'hot-head' });
+    add(head, h('h2', { class: 'hot-title', text: T.title }));
+    add(head, h('span', { class: 'hot-loading', id: 'hot-status', text: T.loading }));
+    /* ⚠️ 用户自己用 ?hot=N 指定了条数时，把这句说出来 ——
+       不然他会以为「怎么只显示 3 条」，还以为是页面坏了。 */
+    if (n !== C.hot.limit) {
+      add(head, h('span', { class: 'hot-param', text: T.paramTag.replace('{n}', String(n)) }));
+    }
+    add(card, head);
+
+    var list = h('ol', { class: 'hot-list', id: 'hot-list' });
+    add(card, list);
+    add(box, card);
+
+    for (var i = 0; i < n; i++) {
+      add(list, h('li', { class: 'hot-row is-skeleton' },
+        h('span', { class: 'hot-rank hot-skeleton' }),
+        h('span', { class: 'hot-text hot-skeleton' })));
+    }
+
+    /* 真正去读云端。读回来之后再把骨架换成真数据。 */
+    G.fetchHotTopics(n).then(function (res) {
+      /* 页面可能已经切走了（比如用户点了「内容库」），这时 box 不在文档里了 ——
+         不去动它，免得往一个已经不在的节点上画东西。 */
+      if (!box.isConnected && document.getElementById('hot') !== box) return;
+      paintHot(box, T, res, n);
+    }).catch(function () {
+      paintHot(box, T, { ok: false, reason: 'query-failed' }, n);
+    });
+  }
+
+  /* 把结果画出来。三种结局，每一种都要说人话：
+       成功   → 榜单 + 「哪一天的榜单」+ 来源（可核对）
+       读不到 → 一句实话 + 原因分类，不给假数据
+       空库   → 说明「今天的还没同步」，也不编 */
+  function paintHot(box, T, res, limit) {
+    clear(box);
+
+    if (!res || !res.ok) {
+      var why = T.failUnknown;
+      if (res && res.reason === 'no-sdk') why = T.failNoSdk;
+      else if (res && res.reason === 'empty') why = T.failEmpty;
+      else if (res && res.reason === 'query-failed') why = T.failQuery;
+
+      var card = h('article', { class: 'hot-card is-fail', 'aria-label': T.title });
+      var head = h('div', { class: 'hot-head' });
+      add(head, h('h2', { class: 'hot-title', text: T.title }));
+      add(head, h('span', { class: 'hot-loading', text: T.failTag }));
+      add(card, head);
+      add(card, h('p', { class: 'hot-fail-msg', text: why }));
+      /* 重试按钮：读不到时给一个「再试一次」的出口，而不是让人去猜。
+         用 textContent 写文字，不拼 HTML（AGENTS 铁律第 1 条）。 */
+      add(card, h('button', {
+        class: 'btn', type: 'button', id: 'btn-hot-retry', text: T.retry
+      }));
+      add(box, card);
+      box.querySelector('#btn-hot-retry').addEventListener('click', function () { renderHot(); });
+      return;
+    }
+
+    var card2 = h('article', { class: 'hot-card', 'aria-label': T.title });
+    var head2 = h('div', { class: 'hot-head' });
+    add(head2, h('h2', { class: 'hot-title', text: T.title }));
+
+    /* ★ 关键的一行：如实标出这份数据是哪一天的榜单。
+       为什么必须有：数据是从云端读的、一天一份快照，页面上不写日期，
+       看的人就分不清「这是刚才的」还是「这是昨天的」。
+       真实数据的可信度，靠的就是这种「能被核对」的细节。 */
+    add(head2, h('span', { class: 'hot-date', text: (T.dateLabel || '') + res.date }));
+
+    /* ⚠️ 「你指定了 N 条」这个标记必须**也**画在这里（Day 17 余力加练踩到的）。
+       第一版只画在「加载中」那版卡片上，而 paintHot 一上来就 clear(box)
+       把整块清掉重画 —— 结果数据一回来，标记就跟着没了。
+       表现是：你输 ?hot=3，页面上真只显示 3 条，但**没有任何一处告诉你
+       「这是你要的 3 条」**，看起来就像页面出了毛病。
+       —— 教训：凡是「用户这次操作的回声」，都必须画在**最终那版**上，
+          画在中间态（加载中）里等于没画。 */
+    if (typeof limit === 'number' && limit !== C.hot.limit) {
+      add(head2, h('span', { class: 'hot-param', text: T.paramTag.replace('{n}', String(limit)) }));
+    }
+    add(card2, head2);
+
+    var list = h('ol', { class: 'hot-list' });
+    res.rows.forEach(function (r) {
+      var li = h('li', { class: 'hot-row' });
+      /* 名次。用文字型序号，纯装饰性的灰字。 */
+      add(li, h('span', { class: 'hot-rank', text: String(r.rank) }));
+
+      /* 标题：有原链接就做成可点的 <a>（跳百度看这条热搜的原始页面），
+         没有链接就退化成纯文字 —— 不给一个点不动的假链接。 */
+      var textWrap = h('span', { class: 'hot-text' });
+      if (r.url) {
+        add(textWrap, h('a', {
+          class: 'hot-link', href: r.url, target: '_blank', rel: 'noopener noreferrer',
+          text: r.title
+        }));
+      } else {
+        add(textWrap, h('span', { text: r.title }));
+      }
+      if (r.summary) {
+        add(textWrap, h('span', { class: 'hot-desc', text: r.summary }));
+      }
+      add(li, textWrap);
+
+      /* 热度值。云端源不给就是 null —— 这时**留空**，不编一个数出来。 */
+      if (r.hot_text) {
+        add(li, h('span', { class: 'hot-value', text: r.hot_text }));
+      }
+      add(list, li);
+    });
+    add(card2, list);
+
+    /* 底部：来源标注 + 一条「去核对」的出口。
+       这是 PRD C4「每条内容都能核到原始出处」在热点这块的落实：
+       来源写清楚（百度实时热搜），点任意一条能跳到原始搜索结果页。
+       ⚠️ 「共 N 条」说的是**库里这一天一共多少条**，不是「显示了几个」——
+       显示几个由上面那个「这次显示 N 条」的标记负责，两个数不能混。 */
+    var foot = h('p', { class: 'hot-src' });
+    add(foot, h('span', { text: (T.srcLabel || '') + (res.rows[0] ? res.rows[0].source_name : '') }));
+    add(foot, h('span', { class: 'sep', text: '·' }));
+    add(foot, h('span', { text: (T.totalLabel || '').replace('{n}', String(res.total || res.rows.length)) }));
+    /* 清单明确要求「显示条数」这件事在页面上有交代 ——
+       这里是全条目（没截断）还是被 limit 截过，一眼要能看出来。 */
+    if (typeof limit === 'number' && res.total > limit) {
+      add(foot, h('span', { class: 'sep', text: '·' }));
+      add(foot, h('span', { text: (T.showLabel || '').replace('{n}', String(limit)) }));
+    }
+    add(card2, foot);
+
+    add(box, card2);
   }
 
   /* ============================================================

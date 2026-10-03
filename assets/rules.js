@@ -419,6 +419,33 @@
     return prefix + fallback;
   }
 
+  /* 从地址里读「这次要几条热点」（Day 17 加，余力加练）。
+     地址形如 '#/home?hot=5' → 5；没写 / 写坏了一律返回 fallback。
+
+     ⚠️ 为什么要有这条：这样同一份页面能当「接口」用 ——
+     想看 3 条就 '#/home?hot=3'，想看全部就 '#/home?hot=30'，
+     不用改代码、不用重新部署。这是纯静态站能做到的最接近「接口参数」的东西。
+
+     ⚠️ 三条规矩，跟其它「外面来的数据」一样：
+     ① 认不出来**不报错**，静默回落到 fallback（写坏一个地址不该看到白屏）；
+     ② 只收 1 ~ max 之间的整数，别的全扔（比如 hot=0、hot=-3、hot=abc、
+        hot=99999 —— 99999 会把页面撑爆，必须夹住）；
+     ③ 不认小数点（hot=2.5 直接当认不出来），因为它要的是「条数」，不是尺寸。 */
+  function hotLimitFromHash(hash, fallback, max) {
+    var s = String(hash === null || hash === undefined ? '' : hash);
+    var at = s.indexOf('?');
+    if (at < 0) return fallback;
+    var q = s.slice(at + 1);
+    var m = /(?:^|&)hot=([^&]*)/.exec(q);
+    if (!m) return fallback;
+    var raw = decodeURIComponent(m[1]);
+    if (!/^\d+$/.test(raw)) return fallback;
+    var n = parseInt(raw, 10);
+    var cap = (typeof max === 'number' && max > 0) ? max : 30;
+    if (n < 1 || n > cap) return fallback;
+    return n;
+  }
+
   window.GROWTH_RULES = {
     dayKey: dayKey,
     fromKey: fromKey,
@@ -447,7 +474,9 @@
     /* Day 13 加 */
     viewKey: viewKey,
     viewIdFromHash: viewIdFromHash,
-    hashOfView: hashOfView
+    hashOfView: hashOfView,
+    /* Day 17 加：地址里的 hot=N 条数限制（余力加练那条） */
+    hotLimitFromHash: hotLimitFromHash
   };
 
 })();

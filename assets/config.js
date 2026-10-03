@@ -120,6 +120,49 @@ window.GROWTH_CONFIG = {
   listDelayMs: 420,
 
   /* 「加载中」的时候先画几条灰条占位（骨架屏），免得一片空白让人以为卡住了 */
-  skeletonRows: 3
+  skeletonRows: 3,
+
+  /* ---------- 云端（Day 17 加） ----------
+
+     ⚠️ 这三个值来自云服务开通时返回的 publicConfig，**允许**放在前端代码里：
+       · endpoint        本应用的数据面地址（一定不能写死别的地址，会连不上）
+       · publishableKey  只是「标识我是哪个应用」，**本身不带任何权限**，
+                         真正的权限由服务端按来源（Origin）校验。
+       · oauthRelayBaseUrl  微信扫码登录用的中转地址。现在没做登录，
+                            但 SDK 初始化要求传，先原样带上。
+     ⚠️ 真正的密钥（服务端的钥匙）**永远不会**出现在这里 —— 它只在服务端。
+        如果哪天发现某个方案要求前端拿一把长期密钥，那个方案就是错的。
+
+     ⚠️⚠️ 踩坑记录 4（Day 17，线上实测最贵的一条）——
+     **endpoint 必须和「网页自己挂的域名」完全一致，服务端按来源精确匹配。**
+     今天上午我误以为云应用要新建，结果建出一个新应用、顺手把数据灌了进去；
+     但网页发布出去后挂的是**老应用的域名**，两边不是一个应用 →
+     请求被服务端一口回绝：
+       HTTP 403 {"error":"access_denied",
+                 "error_description":"the request origin is not allowed for this client"}
+     更坑的是：**浏览器不会把这个 403 告诉你**，它统一报 `TypeError: Failed to fetch`，
+     看起来像「断网」；而不带 Origin 的 curl 却是 200 —— 于是很容易查错方向。
+     教训：**改 endpoint / publishableKey 前，先确认它俩属于「网页当前挂的那个应用」。**
+     判断办法：拿配置去请求一次，带 Origin，看是不是 200。 */
+  cloud: {
+    endpoint: 'https://source-board.app.workbuddy.host',
+    oauthRelayBaseUrl: 'https://www.workbuddy.cn/v2/as/genie-baas/oauth',
+    publishableKey: 'wbpk_e8u8wxL7HunoPn0U8X5CS7_g94jZpavt3LlRkSgivp4QtXNPeP7p655'
+  },
+
+  /* 「今日热点」区块（Day 17 加）。
+     table 是云端那张表的名字；limit 是首页显示几条。
+     为什么是 8：再长就把「今天该做的那三件事」挤下去了 ——
+     首页的主角永远是行动，热点是陪衬。
+
+     limitMax 是**用户能自己指定到几**（Day 17 余力加练）：
+     地址里写 '#/home?hot=N'，N 在 1 ~ limitMax 之间就按 N 条显示。
+     为什么封顶 30：库里一天就 30 条，写 99999 只会让页面白等、白画一堆骨架；
+     而且不封顶的话，一个手抖就能把首屏撑爆。 */
+  hot: {
+    table: 'hot_topics',
+    limit: 8,
+    limitMax: 30
+  }
 
 };
