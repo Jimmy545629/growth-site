@@ -6,8 +6,36 @@
   <title>大学生成长网站</title>
   <meta name="description" content="每天 10 分钟，把认知变成行动。精选认知语录 + 名人访谈 + 政策风口简报。">
   <link rel="stylesheet" href="assets/style.css">
+  <!-- Day 18：整页视频背景的样式单独一个文件，删掉这个 link 就等于关掉，
+       不用在 style.css 里到处摘代码。（纯静态，没有构建步骤，符合约束 C2） -->
+  <link rel="stylesheet" href="assets/hero-video.css">
 </head>
 <body>
+
+  <!-- ============ 整页视频背景（Day 18 加） ============
+       三层，从下到上：
+         1. <video>   —— 视频本身，铺满整屏，循环播放，没有声音
+         2. .veil     —— 压暗层，视频太亮会把白字吃没，靠这一层压住
+         3. .wrap     —— 原来的正常内容，原封不动浮在上面
+
+       ⚠️ 三个必须写对的地方，少一个就出问题：
+       · muted + playsinline：浏览器只允许「静音 + 不是全屏接管」的视频自动播，
+         少这两个属性，手机上会直接不播，桌面端也可能被拦。
+       · aria-hidden="true" + tabindex="-1"：它是纯装饰，
+         读屏软件不该念它，键盘 Tab 也不该停在它上面。
+       · poster：视频有 1MB，网慢的时候先显示一张静态图，不留黑块。
+
+       ⚠️ 更重要的：**视频读不到时，页面必须照常能用**（约束 C1）。
+       这一层是纯装饰、不在 JS 的必经路径上——就算浏览器放不出来，
+       它顶多是一片压暗的底色，下面的内容一个字不少。
+       所以这里故意**不挂** onerror、不写任何依赖视频的脚本。 -->
+  <div class="bg-video" aria-hidden="true">
+    <video class="bg-video-el" id="bg-video"
+           src="assets/hero-sea.mp4"
+           poster="assets/hero-sea-poster.jpg"
+           autoplay muted loop playsinline preload="auto" tabindex="-1"></video>
+    <div class="veil"></div>
+  </div>
 
   <div class="wrap">
 
