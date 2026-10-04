@@ -152,6 +152,33 @@ window.GROWTH_DATA = {
     fullMsg: '已经到上限了 —— 删掉一项再加。'
   },
 
+  /* 「内容库 → 新增一条」这块小表单（Day 18 加）。
+     ⚠️ 老规矩：**数字不写在这儿** ——「最多 60 个字」里的 60 和 200
+     只在 config.js 的 entry 段一处，由页面拼进来。写在这儿就是第二个来源。 */
+  libraryAdd: {
+    head: '新增一条',
+    desc: '给内容库补一条内容。提交后会写进云端数据库，下边会显示从云端读回来的那一行。',
+    reqNote: '带 * 的是必须填的',
+    titleLabel: '标题',
+    titlePlaceholder: '这条内容讲的是什么',
+    sourceLabel: '来源',
+    sourcePlaceholder: '请选择一个来源',
+    summaryLabel: '摘要',
+    summaryPlaceholder: '本站提炼的一句话（不是原文）',
+    summaryOptional: '可以不填',
+    mediaLabel: '形态',
+    submit: '提交',
+    submitting: '提交中…',
+    okHead: '存进去了',
+    okNote: '下边是从云端读回来的那一行 —— 看的是库里的真值，不是我们提交时的副本。',
+    failHead: '没存进去',
+    /* 断网 / 云端读不到时页面要照常能用（约束 C1）——
+       所以这块只负责「提交」这一件事，提交不了就如实说，不影响页面别的部分。 */
+    offlineNote: '提交要联网。连不上时页面其它部分照常能用。',
+    sourcesLoading: '正在读取来源…',
+    sourcesFail: '来源列表没读到 —— 云端可能连不上。这一块暂时不能提交，页面其它部分照常能用。'
+  },
+
   /* ---------- 三列榜单 ----------
 
      ⚠️ 每一条都多两个字段（Day 15 加）：

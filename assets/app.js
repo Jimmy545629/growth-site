@@ -228,6 +228,15 @@
      ⚠️ 每次进来都重画，不缓存 —— 打卡、收藏是可变的，
      缓存一份「上次的样子」就会出现「换了页面回来还是旧数字」。 */
   function enterView(id) {
+    /* 切到**别的**视图时，把「上一次提交的结果」清掉 ——
+       留着会让人以为刚刚提交过（跟首页那条「已记下…」是同一个问题）。
+       草稿**不清**：填一半切走、回来接着填，是正常需求。 */
+    if (id !== 'library') {
+      entryState = 'idle';
+      entryResult = null;
+      entryMsg = '';
+    }
+
     if (id === 'home') {
       /* 切回「今日」时把上一轮的反馈清掉 ——
          否则刚才那条「已记下…」会跟着页面回来，看着像刚点的。 */
@@ -246,6 +255,9 @@
       renderLibraryHead();
       renderLibraryDemo();
       loadLibrary();
+      renderLibraryAdd();
+      /* 来源列表只在「没读到」时才重读 —— 已经读到了就不必每次切进来再请求一遍。 */
+      if (!entrySources || !entrySources.length) loadEntrySources();
     } else if (id === 'me') {
       renderMeHead();
       renderMeFavorites();
@@ -1053,6 +1065,261 @@
 
     add(li, body);
     return li;
+  }
+
+  /* ============================================================
+     六之二、「内容库 → 新增一条」（Day 18 加）
+     ============================================================
+     这是整个项目**第一个「页面向云端写」的地方**。
+     Day 16/17 定的边界是「网页只能读」；Day 18 给云端 contents 表
+     开了一个**只允许新增**的口子，这块就是那个口子的入口。
+     契约全文见 docs/api-contract.md。
+
+     ⚠️ 三条自我约束（写清楚，免得以后越做越大）：
+     1. **只做新增** —— 没有编辑、没有删除（那是第 4 周的事）。
+     2. **不跟上面的榜单联动** —— 榜单读的是本地 data.js，这里提交的进云端表。
+        所以提交完必须**当场把返回显示出来**，否则会让人以为「点了没反应」。
+     3. **要联网**。连不上时这一块如实说，页面其它部分照常能用（约束 C1）。
+     ============================================================ */
+
+  /* 这块的暂存状态。跟内容库那三个变量一样属于「本视图」的，
+     但**草稿留着**（填一半切走、回来接着填是正常需求），
+     只把「上次提交的结果」清掉 —— 留着会让人以为刚刚提交过（跟 notice 一个问题）。 */
+  var entryDraft = { title: '', sourceId: '', summary: '', media: '' };
+  var entryState = 'idle';        /* idle | busy | ok | fail */
+  var entryResult = null;         /* 上一次的返回：成功失败都留一份，用来显示 JSON */
+  var entryMsg = '';              /* 本地拦下来时的那句中文 */
+  var entrySources = null;        /* sources 列表：null = 还没读；[] = 读了但是空或失败 */
+  var entrySourcesNote = '';
+
+  /* 读来源列表。
+     ⚠️ 来源**必须从云端现读**，不能在本地写死一份：这一列的 id 是外键，
+     页面上填一个库里不存在的 id，写进去会被数据库顶回来。
+     「有哪些来源」这件事只能有一个来源 —— 就是那张表。 */
+  function loadEntrySources() {
+    entrySources = null;
+    entrySourcesNote = D.libraryAdd.sourcesLoading;
+    renderLibraryAdd();
+
+    G.fetchSources().then(function (res) {
+      /* 页面可能已经切走了：不去动一个已经不在文档里的节点。 */
+      var box = document.getElementById('library-add');
+      if (!box || !box.isConnected) return;
+
+      if (res.ok) {
+        entrySources = res.rows;
+        entrySourcesNote = '';
+      } else {
+        entrySources = [];
+        /* 读不到要说清是哪一种读不到，而且**不影响页面别的部分** ——
+           「来源读不到」是个次要问题，不该把整页拖死。 */
+        entrySourcesNote = D.libraryAdd.sourcesFail + '（' + res.reason + '）';
+      }
+      renderLibraryAdd();
+    });
+  }
+
+  /* 提交。值从 DOM 现读一遍，不依赖「上次 input 事件更新过」——
+     粘贴、自动填充这些方式不一定触发 input 事件。 */
+  function submitEntry() {
+    var t = document.getElementById('add-title');
+    var s = document.getElementById('add-source');
+    var m = document.getElementById('add-summary');
+    var mk = document.querySelector('input[name="add-media"]:checked');
+    if (t) entryDraft.title = t.value;
+    if (s) entryDraft.sourceId = s.value;
+    if (m) entryDraft.summary = m.value;
+    if (mk) entryDraft.media = mk.value;
+
+    entryMsg = '';
+    entryResult = null;
+    entryState = 'busy';
+    renderLibraryAdd();
+
+    /* 校验和写入都交给 cloud.js —— 页面这一层**不重复实现规则**，
+       否则「页面说可以、库里不认」这种不一致迟早出现。 */
+    G.postEntry({
+      title: entryDraft.title,
+      sourceId: entryDraft.sourceId,
+      summary: entryDraft.summary,
+      media: entryDraft.media
+    }).then(function (res) {
+      var box = document.getElementById('library-add');
+      if (!box || !box.isConnected) return;
+
+      entryResult = res;
+      if (res.ok) {
+        entryState = 'ok';
+        entryMsg = '';
+        /* 成功就把文字清掉 —— 留着上一份会让人以为「还没提交」。
+           形态留着：连着加几条时，多半是同一种形态。 */
+        entryDraft = { title: '', sourceId: '', summary: '', media: entryDraft.media };
+      } else {
+        entryState = 'fail';
+        /* 中文提示直接用 cloud.js 给的那一句，这里**不再写第二句**。 */
+        entryMsg = res.message;
+      }
+      renderLibraryAdd();
+    });
+  }
+
+  /* 把返回原样显示出来。
+     ⚠️ 为什么不美化、不翻译：截图和排查都要看**真实形状** ——
+     字段名、有没有多包一层、时间是什么格式，这些本身就是契约的一部分。
+     一加工，看到的就是我处理过的，不是接口真正给的东西。 */
+  function renderEntryResult(res) {
+    var T = D.libraryAdd;
+    var wrap = h('div', { class: 'add-result' + (res.ok ? ' is-ok' : ' is-fail') });
+
+    add(wrap, h('p', { class: 'add-result-head', text: res.ok ? T.okHead : T.failHead }));
+    if (res.ok) add(wrap, h('p', { class: 'add-result-note', text: T.okNote }));
+
+    /* 只显示契约里承诺过的字段，不把 row 整个摊开（那是排查时看的，页面不需要）。 */
+    var shown = res.ok
+      ? { ok: true, id: res.id, title: res.title, source_id: res.source_id,
+          kind: res.kind, media: res.media, created_at: res.created_at }
+      : { ok: false, code: res.code, message: res.message };
+    add(wrap, h('pre', { class: 'add-json', text: JSON.stringify(shown, null, 2) }));
+
+    return wrap;
+  }
+
+  function renderLibraryAdd() {
+    var box = document.getElementById('library-add');
+    if (!box) return;
+    var T = D.libraryAdd;
+    clear(box);
+
+    var wrap = h('section', { class: 'add-entry' });
+    add(wrap, h('div', { class: 'add-entry-head' },
+      h('h3', { class: 'add-entry-title', text: T.head }),
+      h('p', { class: 'add-entry-desc', text: T.desc })));
+
+    var form = h('form', { class: 'add-entry-form', novalidate: 'novalidate' });
+
+    /* ---- 标题（必填） ---- */
+    var titleInput = h('input', {
+      class: 'add-input', type: 'text', id: 'add-title',
+      maxlength: String(C.entry.titleMax),
+      placeholder: T.titlePlaceholder, value: entryDraft.title
+    });
+    var titleCount = h('span', { class: 'add-count' });
+    function paintTitle() {
+      titleCount.textContent = titleInput.value.length + ' / ' + C.entry.titleMax;
+    }
+    titleInput.addEventListener('input', function () {
+      entryDraft.title = titleInput.value;
+      paintTitle();
+    });
+    paintTitle();
+
+    add(form, h('div', { class: 'add-field' },
+      h('label', { class: 'add-label', 'for': 'add-title' },
+        h('span', { text: T.titleLabel }), h('span', { class: 'add-req', text: '*' })),
+      h('div', { class: 'add-input-row' }, titleInput, titleCount)));
+
+    /* ---- 来源（必填，从云端现读） ---- */
+    var sel = h('select', { class: 'add-input', id: 'add-source' });
+    add(sel, h('option', { value: '', text: T.sourcePlaceholder }));
+    if (entrySources && entrySources.length) {
+      /* 按内容库那三列分组 —— 组名直接取 D.columns，不另写一份，
+         免得出现「页面上叫认知、下拉里叫认知 · 自律」这种不一致。 */
+      D.columns.forEach(function (col) {
+        var mine = entrySources.filter(function (s) { return s.column_key === col.key; });
+        if (!mine.length) return;
+        var og = h('optgroup', { label: col.title });
+        mine.forEach(function (s) {
+          add(og, h('option', {
+            value: s.id, text: s.name, selected: s.id === entryDraft.sourceId
+          }));
+        });
+        add(sel, og);
+      });
+      /* 云端可能有 column_key 认不出来的行 —— 照样列出来，不丢。
+         宁可多一行看不懂的，也不要「库里有、选择框里没有」。 */
+      var known = D.columns.map(function (c) { return c.key; });
+      var rest = entrySources.filter(function (s) { return known.indexOf(s.column_key) < 0; });
+      if (rest.length) {
+        var og2 = h('optgroup', { label: '其它' });
+        rest.forEach(function (s) {
+          add(og2, h('option', {
+            value: s.id, text: s.name, selected: s.id === entryDraft.sourceId
+          }));
+        });
+        add(sel, og2);
+      }
+      sel.value = entryDraft.sourceId || '';
+      sel.addEventListener('change', function () { entryDraft.sourceId = sel.value; });
+    } else {
+      /* 读不到来源时**禁用这一格**，但不禁用整块 ——
+         别让一个次要问题看起来像整页坏了。 */
+      sel.setAttribute('disabled', '');
+    }
+
+    add(form, h('div', { class: 'add-field' },
+      h('label', { class: 'add-label', 'for': 'add-source' },
+        h('span', { text: T.sourceLabel }), h('span', { class: 'add-req', text: '*' })),
+      sel,
+      entrySourcesNote ? h('p', { class: 'add-note', text: entrySourcesNote }) : null));
+
+    /* ---- 摘要（选填） ---- */
+    var sumInput = h('textarea', {
+      class: 'add-input add-textarea', id: 'add-summary',
+      maxlength: String(C.entry.summaryMax), placeholder: T.summaryPlaceholder
+    });
+    sumInput.value = entryDraft.summary;      /* textarea 的值要用 .value 设，不是属性 */
+    var sumCount = h('span', { class: 'add-count' });
+    function paintSum() {
+      sumCount.textContent = sumInput.value.length + ' / ' + C.entry.summaryMax;
+    }
+    sumInput.addEventListener('input', function () {
+      entryDraft.summary = sumInput.value;
+      paintSum();
+    });
+    paintSum();
+
+    add(form, h('div', { class: 'add-field' },
+      h('label', { class: 'add-label', 'for': 'add-summary' },
+        h('span', { text: T.summaryLabel }),
+        h('span', { class: 'add-opt', text: '（' + T.summaryOptional + '）' })),
+      h('div', { class: 'add-input-row' }, sumInput, sumCount)));
+
+    /* ---- 形态（四种，名单来自 config.media，不在这儿再列一遍） ---- */
+    var mrow = h('div', { class: 'add-media-row' });
+    Object.keys(C.media).forEach(function (k) {
+      var id = 'add-media-' + k;
+      add(mrow, h('label', { class: 'add-media-item', 'for': id },
+        h('input', {
+          class: 'add-radio', type: 'radio', name: 'add-media', id: id, value: k,
+          checked: (entryDraft.media || C.mediaDefault) === k
+        }),
+        h('span', { text: C.media[k].label })));
+    });
+    add(form, h('div', { class: 'add-field' },
+      h('span', { class: 'add-label', text: T.mediaLabel }), mrow));
+
+    /* ---- 提交 ---- */
+    var submit = h('button', {
+      class: 'btn btn-primary add-submit', type: 'submit',
+      text: entryState === 'busy' ? T.submitting : T.submit
+    });
+    if (entryState === 'busy' || !entrySources || !entrySources.length) {
+      submit.setAttribute('disabled', '');
+    }
+    add(form, h('div', { class: 'add-actions' }, submit,
+      h('p', { class: 'add-req-note', text: T.reqNote })));
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      submitEntry();
+    });
+    add(wrap, form);
+
+    /* ---- 结果区：本地拦下的话、接口给的话，都在这儿说清楚 ---- */
+    if (entryMsg) add(wrap, h('p', { class: 'add-msg', role: 'status', text: entryMsg }));
+    if (entryResult) add(wrap, renderEntryResult(entryResult));
+
+    add(box, wrap);
   }
 
   /* ============================================================

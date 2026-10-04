@@ -163,6 +163,37 @@ window.GROWTH_CONFIG = {
     table: 'hot_topics',
     limit: 8,
     limitMax: 30
+  },
+
+  /* ---------- 「内容库新增一条」接口（Day 18 加） ----------
+
+     契约全文见 docs/api-contract.md —— 这份常量表就是它的「数字部分」。
+     为什么这些数字要单独拎出来：以后想放宽标题长度，改这一处就够，
+     不用去 cloud.js / app.js 里到处找 60。
+
+     ⚠️ table 是云端**真正在写**的那张表。
+        注意它跟 hot_topics 不是一回事：hot_topics 是「只能读」的公开榜单，
+        contents 这一张 Day 18 才开了「只能新增」的口子（改、删仍然不允许）。
+
+     ⚠️ kind 固定成 'entry'（内容库三列）。
+        为什么不让页面选：contents 表里还有 kind='read' 那一类（今日一篇），
+        它是按日期轮换的，跟「内容库三列」是两套逻辑。
+        页面表单只干「往内容库里补一条」这一件事，不碰另一类。
+        数据库那一侧的 INSERT 策略也写死了 kind='entry'，两边一致。 */
+  entry: {
+    table: 'contents',
+    /* 表单下拉里那些来源从哪张表读。
+       ⚠️ 读它的原因：contents.source_id 是指向 sources.id 的**外键**，
+       页面上填一个库里不存在的 id，写进去会被数据库顶回来。
+       所以「有哪些来源」只能现读，不能在本地另写一份名单。 */
+    sourceTable: 'sources',
+    kind: 'entry',
+    titleMax: 60,
+    summaryMax: 200,
+    /* 页面上加的 id 前缀。'u' = user。
+       为什么加前缀：一眼能看出「这条是从页面上加的」，
+       跟种子数据（book-atomic-habits 这类）分得开。 */
+    idPrefix: 'u'
   }
 
 };

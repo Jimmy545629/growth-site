@@ -965,6 +965,101 @@ body {
 .demo-controls { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .demo-ctl-label { font-size: var(--fs-4); color: var(--ink-faint); }
 
+/* ---------- 「内容库 → 新增一条」（Day 18 加） ----------
+   这是页面上唯一一个「往云端写」的地方，所以样式上**刻意做得跟榜单不一样**：
+   上面三列是「看的东西」，这一块是「动的东西」。
+   用虚线边框 + 更暗的底把它跟榜单分开 —— 一眼能看出「这里不是内容，是入口」。
+
+   ⚠️ 焦点态用 outline 而不是改 border：改 border 会让元素尺寸跳一下，
+   键盘 Tab 过去时整块内容会抖。（同一个理由，别处也一样。） */
+.add-entry {
+  margin-top: var(--sp-7);
+  padding: var(--sp-5);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+}
+.add-entry-head { margin-bottom: var(--sp-4); }
+.add-entry-title { margin: 0; font-size: var(--fs-2); font-weight: 700; }
+.add-entry-desc { margin: var(--sp-1) 0 0; font-size: var(--fs-4); color: var(--ink-faint); }
+
+.add-entry-form { display: flex; flex-direction: column; gap: var(--sp-4); }
+
+.add-field { display: flex; flex-direction: column; gap: var(--sp-2); }
+.add-label { font-size: var(--fs-4); font-weight: 700; color: var(--ink-soft); }
+.add-req { margin-left: 2px; color: var(--warm); }
+.add-opt { font-weight: 400; color: var(--ink-faint); }
+
+.add-input-row { display: flex; align-items: flex-start; gap: var(--sp-3); }
+.add-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--fs-3);
+}
+.add-input::placeholder { color: var(--ink-faint); }
+.add-input:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+.add-input:disabled { opacity: 0.5; }
+.add-textarea { min-height: 72px; resize: vertical; }
+.add-count {
+  flex: 0 0 auto;
+  padding-top: var(--sp-3);
+  color: var(--ink-faint);
+  font-size: var(--fs-4);
+  font-variant-numeric: tabular-nums;   /* 数字等宽：打字时计数器不会左右抖 */
+}
+
+.add-note,
+.add-msg { margin: 0; font-size: var(--fs-4); color: var(--warm); }
+
+.add-media-row { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+.add-media-item {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  color: var(--ink-soft); font-size: var(--fs-3); cursor: pointer;
+}
+.add-radio { width: 16px; height: 16px; margin: 0; accent-color: var(--brand); }
+
+.add-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); }
+.add-submit { min-width: 96px; }
+.add-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.add-submit:disabled:hover { background: var(--card-2); }   /* 禁用时别再有 hover 效果 */
+.add-req-note { margin: 0; font-size: var(--fs-4); color: var(--ink-faint); }
+
+/* 结果区：把接口返回的 JSON **原样**摊出来。
+   等宽字体 + 允许横向滚动 —— id 和时间戳不换行，形状才看得出原样。
+   ⚠️ 不许在这里做「美化」（换行、翻译字段名）：那样看到的就是加工过的，
+   截图和排查都要**真实形状**。 */
+.add-result {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+.add-result.is-ok   { border-left-color: var(--ok); }
+.add-result.is-fail { border-left-color: var(--warm); }
+.add-result-head { margin: 0; font-size: var(--fs-3); font-weight: 700; }
+.add-result.is-ok   .add-result-head { color: var(--ok); }
+.add-result.is-fail .add-result-head { color: var(--warm); }
+.add-result-note { margin: var(--sp-1) 0 0; font-size: var(--fs-4); color: var(--ink-faint); }
+.add-json {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-3);
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink-soft);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Courier New", monospace;
+  font-size: var(--fs-4);
+  line-height: 1.5;
+}
+
 /* ---------- 语录卡底部那条「去『我的』看收藏」入口 ----------
    收藏**列表**搬到「我的」那页了，这条是它的入口。
    为什么要留：按完收藏看不到任何结果，那个功能就等于不存在（Day 12 的教训）。 */
@@ -1219,6 +1314,9 @@ body {
   /* 小屏上热度值挤不下 → 收到标题下面一行 */
   .hot-row { grid-template-columns: 22px 1fr; }
   .hot-value { grid-column: 2; }
+  /* 新增一条：小屏上「输入框 + 字数计数」并排会挤 → 改成竖着排 */
+  .add-input-row { flex-direction: column; gap: var(--sp-2); }
+  .add-count { padding-top: 0; }
 }
 
 /* 用户在系统里开了「减少动态效果」，就把过渡和动画都关掉。
