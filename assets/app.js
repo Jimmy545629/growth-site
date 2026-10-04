@@ -835,32 +835,70 @@
     add(box, h('p', { class: 'view-desc', text: v.desc }));
   }
 
-  /* 内容库的数据源模式。
-     'ok' = 正常有内容；'empty' = 数据回来了但一条都没有；'error' = 读失败。
-     ⚠️ 这三个是**演示用的开关**，不是给用户的产品功能 ——
-     因为现在内容是写在本地的，「空」和「出错」两种情况平时根本撞不上，
-     不做一个开关就永远看不到这两种状态长什么样（清单要求四种都要看得到）。
-     以后真接了后端，这三种情况会自己出现，那时把这块演示区删掉就行。 */
-  var libMode = 'ok';
-  var libState = 'loading';    /* 'loading' | 'ready' | 'empty' | 'error' */
-  var libTimer = null;
+  /* ---------- 内容库的数据来源（Day 18 改：从本地改成云端） ----------
 
-  /* 模拟「去读内容」这件事。
-     先立刻切成「加载中」，等 C.listDelayMs 之后再给结果 ——
-     这就是以后接服务器的形状：先等，再出结果，也可能失败。 */
+     ⚠️ 这一块 Day 18 换过一次血，把原因写下来：
+     原来三列榜单读的是**本地 data.js**（写死的示例内容），
+     而「新增一条」写的是**云端** —— 两处内容各活各的，
+     加完一条在上面那三列里根本看不见，看着就像页面坏了。
+     现在内容只有云端一份（`contents` 表 kind='entry'），两边不会再打架。
+
+     ⚠️ 代价（Jimmy 点头之后才改的）：**断网时这三列就读不到了**。
+     按项目一贯的规矩处理：如实说「这次没读到」+ 给「重试」，
+     **不编数据顶上**，也**不退回本地旧内容** —— 本地那份已经删了。
+
+     ⚠️ 演示区为什么还留着：PRD 8.2 待定项 7 写死了
+     「这块演示区什么时候删，由 Jimmy 说，不自己拆」。
+     现在真接了后端，空 / 出错本来会自然出现，但它仍留着，
+     方便随时把这两种状态调出来检查。 */
+  var libMode = 'ok';          /* 'ok' 读云端 ｜ 'empty' 演示空 ｜ 'error' 演示失败 */
+  var libState = 'loading';    /* 'loading' | 'ready' | 'empty' | 'error' */
+  var libReason = '';          /* 读失败的原因分类（no-sdk / no-client / query-failed…） */
+  var libCache = [];           /* 上一次成功读回来的三栏（演示区要用它画「正常」那一格） */
+  var libReqId = 0;            /* 请求序号：只认最后一次发出的那次 */
+
+  /* 去读内容。三种模式：
+       'ok'    → 真的去云端读（默认，也是唯一的产品路径）
+       'empty' → 演示「一条都没有」（不进网络）
+       'error' → 演示「读取失败」（不进网络） */
   function loadLibrary() {
     libState = 'loading';
     renderLibrary();
 
-    if (libTimer) clearTimeout(libTimer);
-    libTimer = setTimeout(function () {
-      libTimer = null;
-      if (libMode === 'error') libState = 'error';
-      else if (libMode === 'empty') libState = 'empty';
-      else libState = 'ready';
+    if (libMode === 'empty') {
+      libState = 'empty';
+      renderLibrary(); renderLibraryDemo();
+      return;
+    }
+    if (libMode === 'error') {
+      libState = 'error'; libReason = 'query-failed';
+      renderLibrary(); renderLibraryDemo();
+      return;
+    }
+
+    var id = ++libReqId;
+    G.fetchEntries().then(function (res) {
+      /* ⚠️ 只认**最后一次**发出的那次请求。
+         连着点两次重试、或者切走又切回来时，会有两次请求同时在飞，
+         先发的可能后回来 —— 不挡一下，页面就被旧结果盖住了。 */
+      if (id !== libReqId) return;
+
+      if (res && res.ok) {
+        libCache = buildColumns(res.rows);
+        var total = 0;
+        libCache.forEach(function (c) { total += c.items.length; });
+        libState = total ? 'ready' : 'empty';
+      } else {
+        libState = 'error';
+        libReason = (res && res.reason) || 'query-failed';
+      }
       renderLibrary();
-      renderLibraryDemo();   /* 对照区里「现在用的是哪种」要跟着变 */
-    }, C.listDelayMs);
+      renderLibraryDemo();
+    }).catch(function () {
+      if (id !== libReqId) return;
+      libState = 'error'; libReason = 'query-failed';
+      renderLibrary(); renderLibraryDemo();
+    });
   }
 
   function renderLibrary() {
@@ -868,8 +906,18 @@
     if (!box) return;
     clear(box);
 
-    if (libState === 'loading' || libState === 'error') {
-      add(box, ListState(libState, { onRetry: function () { loadLibrary(); } }));
+    if (libState === 'loading') {
+      /* 加载中也把三列的**标题**画出来，只把列表部分换成骨架 ——
+         整块换成一句「加载中」，会让人以为内容库只长这样。 */
+      add(box, renderColumns(emptyColumns(), { state: 'loading' }));
+      return;
+    }
+    if (libState === 'error') {
+      add(box, ListState('error', {
+        title: D.libraryFail.title,
+        hint: failHint(libReason),
+        onRetry: function () { loadLibrary(); }
+      }));
       return;
     }
     if (libState === 'empty') {
@@ -878,12 +926,105 @@
       add(box, renderColumns(emptyColumns()));
       return;
     }
-    add(box, renderColumns(D.columns));
+    add(box, renderColumns(libCache));
   }
 
+  /* 读失败时那句「为什么」，按原因分开说 ——
+     「不知道哪坏了」和「知道是没联网」，对用户是两件事。 */
+  function failHint(reason) {
+    var T = D.libraryFail || {};
+    if (reason === 'no-sdk') return T.noSdk;
+    if (reason === 'no-client') return T.noClient;
+    if (reason === 'empty') return T.empty;
+    return T.query;
+  }
+
+  /* 把云端取回来的那些行，按「来源属于哪一栏」分到三列里。
+     ⚠️ 分组依据是 `sources.column_key` ——「这条属于哪一栏」这件事
+     存在**来源**那张表上（一个来源固定属于一栏），不在内容本身上。
+
+     ⚠️ 认不出来的栏目**不许悄悄丢掉**（丢掉 = 数据在页面上凭空消失，
+     最难查的那种毛病）。单独开一栏放着，页面上看得见就知道要去修。 */
+  function buildColumns(rows) {
+    var defs = D.columns;
+    var indexOfKey = {};
+    defs.forEach(function (c, i) { indexOfKey[c.key] = i; });
+
+    var buckets = defs.map(function (c) {
+      return { key: c.key, title: c.title, note: c.note, accent: c.accent, items: [] };
+    });
+    var other = null;
+
+    (rows || []).forEach(function (r) {
+      var src = (r && r.sources) || {};
+      var key = String(src.column_key || '');
+      var at = indexOfKey[key];
+      var item = entryFromRow(r);
+
+      if (at === undefined) {
+        if (!other) {
+          other = { key: '__other__', title: '其它', accent: '#8b93a7',
+                    note: '这些条目的来源没归到已知栏目里 —— 去 sources 表把 column_key 补上', items: [] };
+          buckets.push(other);
+        }
+        other.items.push(item);
+        return;
+      }
+      buckets[at].items.push(item);
+    });
+
+    return buckets;
+  }
+
+  /* 把云端的一行，还原成**本地原来那种形状**的条目。
+     ⚠️ 这是整块改造的关键一招：只要还原成一样的形状，
+     下面那些画内容的函数（renderEntry…）**一行都不用改**。
+
+     两边的字段对应关系：
+       标题/标签/形态/时长 → 同名照搬
+       出处                → detail.origin，没有就用来源表的 name
+       时间                → 用 created_at 现算「N 天前」（rules.js 的 daysAgo）
+       标签颜色            → detail.tagColor，没有就按栏目给默认色
+       栏目特有的富字段    → detail 里那几个键（金句 / 行动点 / 启示 / 技能）
+     ⚠️ 摘要（summary）在三个栏目里叫法不一样，得按栏目分：
+       认知是「一句话笔记」、访谈是「核心观点」、政策是「一句话结论」。
+       分错的后果是画出来的标题张冠李戴。 */
+  function entryFromRow(r) {
+    var src = (r && r.sources) || {};
+    var d = (r && r.detail && typeof r.detail === 'object') ? r.detail : {};
+    var col = String(src.column_key || '');
+
+    var it = {
+      title: r && r.title,
+      tag: (r && r.tag) || '',
+      tagColor: d.tagColor || (C.entry.tagColor && C.entry.tagColor[col]) || 'blue',
+      media: r && r.media,
+      dur: (r && r.dur) || '',
+      origin: d.origin || src.name || '',
+      time: R.daysAgo(r && r.created_at)
+    };
+
+    if (col === 'interview') {
+      it.person = d.person || src.name || '';
+      it.role = d.role || src.note || '';
+      it.view = r && r.summary;                 /* 摘要 = 核心观点 */
+      it.quote = d.quote || '';
+      it.steps = isArray(d.steps) ? d.steps : [];
+    } else if (col === 'policy') {
+      it.conclusion = r && r.summary;           /* 摘要 = 一句话结论 */
+      it.impact = d.impact || '';
+      it.skills = isArray(d.skills) ? d.skills : [];
+    } else {
+      it.note = r && r.summary;                 /* 认知：就是一句话笔记 */
+    }
+    return it;
+  }
+
+  function isArray(v) { return Object.prototype.toString.call(v) === '[object Array]'; }
+
   /* 把三列内容变成「空的」——每列标题保留、items 清空。
-     ⚠️ 必须造**新的对象**，不能直接改 D.columns 里的 items：
-     那样就把原始内容数据改坏了（这是「一个事实一个来源」的另一面）。 */
+     ⚠️ 必须造**新的对象**，不能直接改 D.columns 里的东西：
+     那样就把栏目定义改坏了（这是「一个事实一个来源」的另一面）。 */
   function emptyColumns() {
     return D.columns.map(function (col) {
       return { key: col.key, title: col.title, note: col.note, accent: col.accent, items: [] };
@@ -901,7 +1042,7 @@
     var wrap = h('section', { class: 'demo' });
     add(wrap, h('div', { class: 'demo-head' },
       h('h3', { class: 'demo-title', text: '四种状态对照' }),
-      h('p', { class: 'demo-note', text: '开发演示区：上面四格是列表的四种样子。正式产品里不会给用户看到这一块 —— 它在这儿只是为了让四种状态能一眼对照、一个个检查。' })));
+      h('p', { class: 'demo-note', text: '开发演示区：上面四格是列表的四种样子。Day 18 起内容库真的改读云端了，空 / 加载中 / 出错这三种情况也会真的发生 —— 这一块留着是为了随时能把它们调出来对照检查，正式产品里不会给用户看到。' })));
 
     var row = h('div', { class: 'demo-row' });
     var L = D.listStates.labels;
@@ -926,7 +1067,7 @@
     var ctl = h('div', { class: 'demo-controls' });
     add(ctl, h('span', { class: 'demo-ctl-label', text: '把下面的内容库切成：' }));
     var modes = [
-      { m: 'ok', label: '正常数据', attr: 'ok' },
+      { m: 'ok', label: '读云端', attr: 'ok' },
       { m: 'empty', label: '空数据', attr: 'empty' },
       { m: 'error', label: '读取失败', attr: 'error' }
     ];
@@ -960,22 +1101,32 @@
     return ListState('ready', { rows: miniRows(2) });
   }
 
-  /* 从第一列「认知 · 自律」里取前 n 条，画成小列表（对照区用） */
+  /* 从第一栏「认知 · 自律」里取前 n 条，画成小列表（对照区用）。
+     ⚠️ 数据改成从 libCache（云端读回来的）取，不再读 D.columns[0].items ——
+     Day 18 起本地那份 items 已经删了（内容搬到云端了），
+     再读本地只会拿到一个空数组，对照区就会静悄悄地什么都不画。 */
   function miniRows(n) {
-    var col = D.columns[0];
+    var col = (libCache && libCache[0]) || null;
+    var items = (col && col.items) || [];
+    /* 一条都还没读回来（首次打开的那一瞬间）→ 画骨架，不留空白格。
+       空白格看着像「这块坏了」，而它其实只是在路上。 */
+    if (!items.length) return ListState('loading', { rowsNum: n });
+
     var out = h('ol', { class: 'col-list' });
-    for (var i = 0; i < n && i < col.items.length; i++) {
+    for (var i = 0; i < n && i < items.length; i++) {
       add(out, h('li', { class: 'entry' },
         h('span', { class: 'entry-no', text: i + 1 }),
         h('div', { class: 'entry-body' },
-          h('p', { class: 'entry-title', text: col.items[i].title }))));
+          h('p', { class: 'entry-title', text: items[i].title }))));
     }
     return out;
   }
 
   /* 三列榜单本体。cols 由调用方给：
-     正常时是 D.columns，演示「空」时是 emptyColumns()。 */
-  function renderColumns(cols) {
+     正常时是 libCache（云端读回来的），演示「空」/「加载中」时是 emptyColumns()。
+     opts.state = 'loading' 时，空列画骨架而不是「空空如也」。 */
+  function renderColumns(cols, opts) {
+    var o = opts || {};
     var box = h('section', { class: 'columns', 'aria-label': '精选内容' });
 
     cols.forEach(function (col) {
@@ -986,15 +1137,19 @@
           h('span', { class: 'dot' }), col.title),
         h('p', { class: 'col-note', text: col.note })));
 
-      if (!col.items.length) {
-        /* 这一列没有内容 → 走空状态，而不是留一片空白 */
-        add(sec, ListState('empty', {}));
-      } else {
+      if (col.items.length) {
         var list = h('ol', { class: 'col-list' });
         col.items.forEach(function (it, i) {
           add(list, renderEntry(it, i + 1));
         });
         add(sec, list);
+      } else if (o.state === 'loading') {
+        /* 还在读：画骨架。这条路径**必须有** ——
+           否则「加载中」看起来就是「这一栏是空的」，两件事会被看成一件。 */
+        add(sec, ListState('loading', { rowsNum: 3 }));
+      } else {
+        /* 这一列没有内容 → 走空状态，而不是留一片空白 */
+        add(sec, ListState('empty', {}));
       }
       add(box, sec);
     });
@@ -1020,13 +1175,17 @@
        有 dur 就是「文章 · 约 6 分钟」，没有就只写「文章」；
        media 认不出来时回落到「文章」，**不报错、也不印 undefined**。 */
     add(meta, h('span', { class: 'media-badge' }, R.mediaBadge(it)));
-    add(meta, Tag(it.tag, it.tagColor));
+    /* ⚠️ 下面这几样都可能没有（比如从页面表单加的那条，只填了标题和摘要）。
+       没有就不画那一段 —— **不许留空壳、不许印 undefined**。 */
+    if (it.tag) add(meta, Tag(it.tag, it.tagColor));
     if (it.person) {
-      add(meta, h('span', { class: 'entry-person', text: it.person + ' · ' + it.role }));
+      add(meta, h('span', { class: 'entry-person', text: it.role ? it.person + ' · ' + it.role : it.person }));
     }
     if (it.origin) add(meta, h('span', { text: it.origin }));
-    add(meta, h('span', { class: 'sep', text: '·' }));
-    add(meta, h('span', { text: it.time }));
+    if (it.time) {
+      add(meta, h('span', { class: 'sep', text: '·' }));
+      add(meta, h('span', { text: it.time }));
+    }
     add(body, meta);
 
     /* 语录/笔记类：一句话摘要 */
@@ -1039,13 +1198,19 @@
       var dl = h('dl', { class: 'entry-extra' });
       add(dl, h('dt', { text: '核心观点' }));
       add(dl, h('dd', { text: it.view }));
-      add(dl, h('dt', { text: '金句' }));
-      add(dl, h('dd', { text: '「' + it.quote + '」' }));
+      /* 金句、行动点都可能缺（表单加的内容就没有）——
+         缺了就跳过，**不印一个空的「」**。 */
+      if (it.quote) {
+        add(dl, h('dt', { text: '金句' }));
+        add(dl, h('dd', { text: '「' + it.quote + '」' }));
+      }
       add(body, dl);
 
-      var ul = h('ul', { class: 'entry-steps' });
-      it.steps.forEach(function (s) { add(ul, h('li', { text: s })); });
-      add(body, ul);
+      if (isArray(it.steps) && it.steps.length) {
+        var ul = h('ul', { class: 'entry-steps' });
+        it.steps.forEach(function (s) { add(ul, h('li', { text: s })); });
+        add(body, ul);
+      }
     }
 
     /* 政策：一句话结论 + 对大学生的启示 + 相关技能 */
@@ -1053,14 +1218,18 @@
       var dl2 = h('dl', { class: 'entry-extra' });
       add(dl2, h('dt', { text: '一句话结论' }));
       add(dl2, h('dd', { text: it.conclusion }));
-      add(dl2, h('dt', { text: '对大学生的启示' }));
-      add(dl2, h('dd', { text: it.impact }));
+      if (it.impact) {
+        add(dl2, h('dt', { text: '对大学生的启示' }));
+        add(dl2, h('dd', { text: it.impact }));
+      }
       add(body, dl2);
 
-      var skills = h('div', { class: 'entry-meta', style: { 'margin-top': '8px' } });
-      add(skills, h('span', { text: '相关技能：' }));
-      it.skills.forEach(function (s) { add(skills, Tag(s, 'green')); });
-      add(body, skills);
+      if (isArray(it.skills) && it.skills.length) {
+        var skills = h('div', { class: 'entry-meta', style: { 'margin-top': '8px' } });
+        add(skills, h('span', { text: '相关技能：' }));
+        it.skills.forEach(function (s) { add(skills, Tag(s, 'green')); });
+        add(body, skills);
+      }
     }
 
     add(li, body);

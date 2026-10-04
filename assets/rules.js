@@ -286,6 +286,43 @@
     return dur ? def.label + ' · ' + dur : def.label;
   }
 
+  /* 把云端那一行的 created_at 算成「N 天前」（Day 18 加）。
+
+     ⚠️ 为什么非要现算、不能写死：
+     本地原来把时间写死成「1 天前 / 2 天前」—— 可那条文案**会过期**。
+     过一个月再打开，它还写着「1 天前」，那就是在说假话。
+     内容搬到云端后，每行都带入库时间，按它现算才是真的。
+
+     规则（跟打卡那里一个规矩：一律按**本地日期**算，不碰 UTC）：
+       今天 → 「今天」；1 天前 → 「昨天」；
+       2~29 天 → 「N 天前」；30 天起 → 「N 个月前」；满 12 个月 → 「N 年前」。
+
+     ⚠️ 认不出来（null / 空 / 乱码）一律返回 **空串**，
+     页面上那一小段就不画 —— 既不印 undefined，也不编一个时间。 */
+  function daysAgo(iso, todayKey) {
+    var raw = (typeof iso === 'string') ? iso.replace(/^\s+|\s+$/g, '') : '';
+    if (!raw) return '';
+    var d = new Date(raw);
+    if (isNaN(d.getTime())) return '';
+
+    var today = todayKey || dayKey(new Date());
+    /* 先各自取「本地日期」再相减。
+       直接减时间戳会把小时也算进去 —— 相差 30 小时可能被算成 1 天或 2 天，
+       同一个 date 值算出来的结果不稳定。 */
+    var diff = Math.round(
+      (fromKey(today).getTime() - fromKey(dayKey(d)).getTime()) / 86400000
+    );
+    /* 未来时间（时钟不准、或数据被改坏）当「今天」，不显示负数天数 */
+    if (!isFinite(diff) || diff < 0) diff = 0;
+
+    if (diff === 0) return '今天';
+    if (diff === 1) return '昨天';
+    if (diff < 30) return diff + ' 天前';
+    var months = Math.floor(diff / 30);
+    if (months < 12) return months + ' 个月前';
+    return Math.floor(months / 12) + ' 年前';
+  }
+
   /* ------------------------------------------------------------
      四·D、「今日一篇」（Day 15 加）
      ------------------------------------------------------------ */
@@ -471,6 +508,8 @@
     cleanReads: cleanReads,
     dayNumber: dayNumber,
     pickDaily: pickDaily,
+    /* Day 18 加：把云端的 created_at 算成「N 天前」（内容库读云端用） */
+    daysAgo: daysAgo,
     /* Day 13 加 */
     viewKey: viewKey,
     viewIdFromHash: viewIdFromHash,

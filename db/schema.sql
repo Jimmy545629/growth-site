@@ -84,7 +84,16 @@ CREATE TABLE IF NOT EXISTS contents (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   -- 服务端留痕（Day 18 加）：这一行是从哪条通道写进来的。
   -- 默认值 current_user 由**数据库自己**填，前端改成别的值会被 INSERT 策略拒绝。
-  created_via TEXT        DEFAULT current_user
+  created_via TEXT        DEFAULT current_user,
+  -- 富字段（Day 18 加）：一个 jsonb，装「标题之外那些补充块」。
+  -- ⚠️ 为什么用一个 jsonb，而不是拆成好几个固定列：
+  --   三个栏目要存的东西**本来就不一样** ——
+  --     认知：tagColor / origin
+  --     访谈：tagColor / person / role / quote / steps[]
+  --     政策：tagColor / origin / impact / skills[]
+  --   拆成固定列的话，每一栏都会拖着一串用不上的空列；
+  --   而且以后加一种栏目就得动表结构。jsonb 是「缺哪个键就不写」，正合适。
+  detail      JSONB
 );
 
 COMMENT ON TABLE  contents            IS '内容条目：内容库三列（kind=entry）＋「今日一篇」（kind=read）';
@@ -99,6 +108,7 @@ COMMENT ON COLUMN contents.url        IS '原链接。真实收录开始前故�
 COMMENT ON COLUMN contents.summary    IS '本站提炼的摘要，不是原文';
 COMMENT ON COLUMN contents.created_at IS '入库时间，默认当下';
 COMMENT ON COLUMN contents.created_via IS '服务端留痕（Day 18 加）：这一行是从哪条通道写进来的。匿名网页 = anon；维护者通道 = 管理员角色名。由数据库自己填，前端改成别的值会被 INSERT 策略拒绝';
+COMMENT ON COLUMN contents.detail     IS '富字段（Day 18 加，三列榜单用）。按栏目不同：认知存 tagColor/origin；访谈存 tagColor/person/role/quote/steps；政策存 tagColor/origin/impact/skills。缺哪个键就不写。云端原本只存标题/标签/形态/时长/摘要，这几样是后补的（见本文件 Day 18 段 ⑤）';
 
 
 -- ---------- 安全边界：公开可读，客户端不许写 ----------
@@ -163,7 +173,43 @@ CREATE POLICY contents_insert_guard ON contents FOR INSERT TO anon, authenticate
     AND created_via = current_user
   );
 
--- 校验改动有没有生效（这四条都应该有结果）：
+-- ⑤ 列：富字段（跟「内容库三列改读云端」一起加的）。
+--    ⚠️ 为什么需要它：云端原来只存了 标题 / 标签 / 形态 / 时长 / 摘要，
+--    而本地榜单里还躺着「金句」「3 个行动点」「对大学生的启示」「相关技能」——
+--    照直切去读云端，这四样会**当场消失**。
+--    所以顺序是「**先把云端补齐，再切去读云端**」，不是先切换再说。
+ALTER TABLE contents ADD COLUMN IF NOT EXISTS detail JSONB;
+
+-- ⑥ 把本地那 12 条（kind='entry'）的富字段搬进 detail。
+--    ⚠️ 这一段是**一次性数据迁移**，只为补齐老内容。
+--    以后从页面表单加的内容没有这些字段（表单只收标题 / 来源 / 形态 / 摘要），
+--    detail 留空是**正常**的 —— 页面上会跳过那几行，不会留个空壳（见 app.js 的 renderEntry）。
+--    ⚠️ 这里用 jsonb_build_object 而不是手写 JSON 字符串：
+--    手写的话字符串里要塞一堆双引号，转义错一个字整条 SQL 就废了。
+UPDATE contents AS c SET detail = v.d
+FROM (VALUES
+  ('entry-goal-vs-system',               jsonb_build_object('tagColor','blue','origin','《原子习惯》')),
+  ('entry-delayed-gratification',        jsonb_build_object('tagColor','cyan','origin','公开演讲')),
+  ('entry-three-things',                 jsonb_build_object('tagColor','violet','origin','《精要主义》')),
+  ('entry-break-down',                   jsonb_build_object('tagColor','green','origin','读书笔记')),
+  ('entry-phone-away',                   jsonb_build_object('tagColor','amber','origin','《深度工作》')),
+  ('entry-zhangyiming-delay',            jsonb_build_object('tagColor','amber','person','张一鸣','role','字节跳动创始人',
+                                     'quote','很多人二十多岁的时候，就已经把一辈子的选择做完了。',
+                                     'steps', jsonb_build_array('把一个「想要但很急」的念头写下来，放 7 天再看','选一件「短期没反馈」的事，坚持 3 个月再看结果','每次想放弃时，记下原因——那是你真实的软肋清单'))),
+  ('entry-leijun-fengkou',               jsonb_build_object('tagColor','blue','person','雷军','role','小米创始人',
+                                     'quote','不要用战术上的勤奋，掩盖战略上的懒惰。',
+                                     'steps', jsonb_build_array('每周花 30 分钟只看趋势，不看八卦','把你所在行业近 3 年的变化写成三句话','找一件「就算失败也值得做」的事先干起来'))),
+  ('entry-huangzheng-benfen',            jsonb_build_object('tagColor','violet','person','黄峥','role','拼多多创始人',
+                                     'quote','本分就是做好自己该做的事，而不是去抢别人的事。',
+                                     'steps', jsonb_build_array('写下你当前身份最该做的一件正事','这周主动拒掉一件「不属于你」的事','月底回头看：你的时间花在哪了'))),
+  ('entry-policy-ai-industry',           jsonb_build_object('tagColor','green','origin','官方文件','impact','会用 AI 工具已经成为像会用 Office 一样的基础项，而不是加分项','skills', jsonb_build_array('提示词工程','数据分析','AI 工具实操'))),
+  ('entry-policy-digital-economy',       jsonb_build_object('tagColor','blue','origin','官方文件','impact','纯文科技能要配一门数据能力才更抗跌','skills', jsonb_build_array('SQL','Excel 建模','行业数据解读'))),
+  ('entry-policy-graduate-jobs',         jsonb_build_object('tagColor','amber','origin','官方文件','impact','求职时别只盯大厂，看清政策倾斜的方向能多一条路','skills', jsonb_build_array('政策解读','简历匹配','面试表达'))),
+  ('entry-policy-manufacturing-digital', jsonb_build_object('tagColor','violet','origin','官方文件','impact','工科背景的同学，叠加编程能力会明显更吃香','skills', jsonb_build_array('Python','自动化控制','工业软件')))
+) AS v(id, d)
+WHERE c.id = v.id;
+
+-- 校验改动有没有生效（这几条都应该有结果）：
 --   SELECT conname FROM pg_constraint WHERE conrelid = 'public.contents'::regclass;
 --     → contents_pkey / contents_source_id_fkey / contents_source_title_key
 --   SELECT name, cmd FROM pg_policies WHERE tablename = 'contents';
@@ -174,3 +220,5 @@ CREATE POLICY contents_insert_guard ON contents FOR INSERT TO anon, authenticate
 --   SELECT column_name, column_default FROM information_schema.columns
 --     WHERE table_name = 'contents' AND column_name = 'created_via';
 --     → 默认值 = current_user
+--   SELECT count(*) FILTER (WHERE detail IS NOT NULL) FROM contents WHERE kind = 'entry';
+--     → 12（本地那 12 条的富字段已经搬进云端；从页面表单加的那条没有 detail，是正常的）

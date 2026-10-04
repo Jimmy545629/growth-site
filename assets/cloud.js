@@ -7,9 +7,13 @@
    把「数据从哪来」这件事关在一个文件里，页面代码一个字都不用知道
    数据是来自本地抽屉还是来自云端。以后要换数据源，只改这一个文件。
 
-   【它读什么（Day 17）】
+   【它读什么（Day 17 → Day 18 扩）】
    云端数据库的 `hot_topics` 表 —— 每日真实热搜快照（来源：百度实时热搜）。
    这张表**只有 SELECT 权限**（Day 16 定的边界），网页一行也写不进去。
+
+   Day 18 起又多读两张：
+   · `contents` 表（kind='entry' 那部分）—— 内容库三列的条目
+   · `sources` 表 —— 来源名单（「新增一条」的下拉要填真 id）
 
    【它写什么（Day 18）】
    云端数据库的 `contents` 表 —— 内容库的条目。
@@ -26,9 +30,11 @@
 
    【断网 / 云端读不到会怎样】
    **不白屏、不报错、不假装有数据。**
-   返回 { ok:false, reason:… }，由 app.js 决定显示「暂时读不到」还是
-   退回本地内容。宁可如实说「这次没读到」，也不要编一条数据顶上
+   返回 { ok:false, reason:… }，由 app.js 决定把「这次没读到」如实说出来，
+   并给一个「重试」的出口。宁可说「这次没读到」，也不要编一条数据顶上
    （这是 PRD 硬约束 C4 的精神：不许编）。
+   ⚠️ Day 18 起，内容库三列**不再退回本地内容** —— 因为本地那份已经删了，
+   内容只有云端一份。读不到就是读不到，页面如实说，不是「降级显示旧数据」。
 
    加载顺序（见 index.html）：config.js → cloud.js → rules.js → store.js
    → data.js → app.js
@@ -155,6 +161,49 @@
           var rows = (res && res.data) || [];
           if (!rows.length) return { ok: false, reason: 'empty' };
           return { ok: true, rows: rows };
+        });
+    }).catch(function (e) {
+      return { ok: false, reason: 'query-failed', detail: e };
+    });
+  }
+
+  /* ---------- 读内容库三列的条目（Day 18 加） ----------
+     为什么需要它：Day 18 把「内容库三列」从「读本地 data.js」改成「读云端」。
+     改的原因很直白 ——「新增一条」写的是云端，榜单读的是本地，
+     两处内容各活各的，加完一条在榜单里看不见。
+     那是最容易让人以为「页面坏了」的一种设计。
+
+     读的是 contents 表里 kind='entry' 的行，**并顺带把来源那张表带出来**
+     （sources 的 name / column_key）—— 因为「这条属于哪一栏」这件事
+     存在 sources.column_key 上，不在 contents 表里。
+
+     出参：{ ok:true, rows:[ {…contents 那一行的字段…, sources:{…}} ], total }
+           { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty' }
+     ⚠️ 这一层**只取数、不分组**：分组是页面的事。
+        cloud.js 的职责从始至终只有一件：把数据原样取回来。 */
+  function fetchEntries() {
+    return waitForSdk().then(function (WB) {
+      if (!WB) return { ok: false, reason: 'no-sdk' };
+
+      var c = buildClient(WB);
+      if (!c) return { ok: false, reason: 'no-client' };
+
+      return c.database
+        .from(C.entry.table)
+        /* ⚠️ 尾巴上那个 sources(…) 是 PostgREST 的「一次查两张表」写法：
+           靠 contents.source_id → sources.id 那个外键，把来源的字段一并取回。
+           它比「查两次、再在页面里按 id 对上」稳 ——
+           两次查之间库要是变了，拼出来的东西就是错的。 */
+        .select('id, source_id, kind, title, tag, media, dur, url, summary, detail, created_at, sources(name, platform, column_key, note)')
+        .eq('kind', C.entry.kind)
+        /* 新的排前面。这样「刚加的那条」永远在第一栏最上面，一眼看得见。 */
+        .order('created_at', { ascending: false })
+        .limit(200)
+        .then(function (res) {
+          if (res && res.error) return { ok: false, reason: 'query-failed', detail: res.error };
+          var rows = (res && res.data) || [];
+          if (!rows.length) return { ok: false, reason: 'empty' };
+          return { ok: true, rows: rows, total: rows.length };
         });
     }).catch(function (e) {
       return { ok: false, reason: 'query-failed', detail: e };
@@ -348,7 +397,8 @@
   window.GROWTH_CLOUD = {
     /* 读（Day 17） */
     fetchHotTopics: fetchHotTopics,
-    /* 读（Day 18）：新增表单的下拉要用 */
+    /* 读（Day 18）：内容库三列的条目 ＋ 新增表单的下拉 */
+    fetchEntries: fetchEntries,
     fetchSources: fetchSources,
     /* 写（Day 18） */
     postEntry: postEntry,

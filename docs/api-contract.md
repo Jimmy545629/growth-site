@@ -18,8 +18,9 @@
 | --- | --- | --- | --- | --- | --- |
 | **01** | GET | `GROWTH_CLOUD.fetchHotTopics(limit)` | 读「当日热搜」那一份快照 | `assets/cloud.js` | Day 17 |
 | **02** | POST | `GROWTH_CLOUD.postEntry(input)` | **新增一条内容**，写进云端 `contents` 表 | `assets/cloud.js` | **Day 18** |
+| **03** | GET | `GROWTH_CLOUD.fetchEntries()` | **读内容库三列的条目**（`contents` 表 `kind='entry'` ＋ 关联 `sources`） | `assets/cloud.js` | **Day 18** |
 
-⚠️ **两条接口都住在 `assets/cloud.js`** —— 这是全项目**唯一**允许碰云端的文件
+⚠️ **三条接口都住在 `assets/cloud.js`** —— 这是全项目**唯一**允许碰云端的文件
 （跟 `store.js` 是全项目唯一碰 localStorage 的文件，是同一个思路）。
 
 ⚠️ **调用方式**：页面代码一律用官方 SDK，**不许自己手写 `fetch` 去拼 `/.cloud/…` 的地址**，
@@ -161,6 +162,72 @@ DATABASE_42501   new row violates row-level security policy for table "contents"
 
 ---
 
+## 二·二、GET `fetchEntries` —— 读内容库三列的条目
+
+### 2b.1 它做什么
+
+把云端 `contents` 表里 **`kind='entry'`** 的那些行取回来，
+**并顺带把每一条的来源（`sources` 表）一起带回来** ——
+因为「这条属于哪一栏」这件事存在 `sources.column_key` 上，不在内容本身上。
+
+### 2b.2 入参
+
+无。要几条、怎么分组，都由页面决定。
+
+### 2b.3 出参
+
+```
+成功：{ ok: true,  rows: [ {…contents 那一行的字段…, sources: {…}}, … ], total: 13 }
+失败：{ ok: false, reason: 'no-sdk' | 'no-client' | 'query-failed' | 'empty' }
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `rows` | 每一行是 `contents` 的字段 ＋ 一个 `sources` 子对象（`name` / `platform` / `column_key` / `note`） |
+| `total` | 一共几条（方便页面核对，不用自己再数一遍） |
+| `reason` | 读失败的原因分类，页面按它给出不同的中文说法 |
+
+⚠️ **形状跟 01 / 02 保持一致**：读接口一律 `{ok, reason}`，写接口一律 `{ok, code, message}`。
+调用方只要记**两套**形状，不用为每个接口学一种新写法。
+
+⚠️ **这一层只取数、不分组、不做业务判断**：
+分组（按 `column_key` 分三栏）、把云端字段还原成页面上要的形状，
+都在 `app.js` 的 `buildColumns()` / `entryFromRow()`。
+`cloud.js` 的职责从始至终只有一件：**把数据原样取回来**。
+
+### 2b.4 `reason` 的四种取值
+
+| `reason` | 什么时候发生 | 页面上显示 |
+| --- | --- | --- |
+| `no-sdk` | 云端 SDK 没加载出来（多半是没联网 / 被拦） | 「云端组件没加载成功……」 |
+| `no-client` | SDK 在，但连接没建起来 | 「云端连接没建起来……」 |
+| `query-failed` | 请求发出去了但没拿到结果 | 「这次没读到云端的内容……」 |
+| `empty` | 读回来了，但库里一条都没有 | 「云端库里现在一条内容都没有。这不算坏了 —— 是内容还没录进去。」 |
+
+⚠️ **以上四种页面都只做一件事：如实说 + 给「重试」。绝不编内容顶上。**
+这一条是 PRD 硬约束 **C4** 的精神，跟「今日热点」读不到时的处理完全一样。
+
+### 2b.5 一个必须记住的取舍：内容库从此**要联网**了
+
+Day 18 之前，内容库读的是**本地 `data.js`**（写死的示例内容），断网照样能看。
+改成读云端之后，**断网时这三栏就读不到了**。
+
+这不是 bug，是**知情之后换来的**：
+
+| | 改之前（读本地） | 改之后（读云端） |
+| --- | --- | --- |
+| 断网 | 照常显示（但内容是死的） | **读不到，如实报错** |
+| 页面表单加一条 | 榜单里**看不见**（两处数据各活各的） | **立刻能看见** |
+| 内容的份数 | **两份**（本地一份、云端一份） | **一份**（只有云端） |
+
+选它的理由：**同一份内容有两个来源，迟早会出现两种说法** ——
+那是这个项目从 Day 10 起就反复吃过的亏（见 `AGENTS.md` 的「一个事实一个来源」）。
+
+⚠️ 边界没变：**个人的打卡 / 收藏 / 自己加的行动项，依然一行都不上云**（约束 C1）。
+上云的只有**公开内容**。
+
+---
+
 ## 三、这一版没做的（说清楚，免得以为是漏了）
 
 | 没做的 | 为什么 |
@@ -182,10 +249,14 @@ DATABASE_42501   new row violates row-level security policy for table "contents"
 | --- | --- |
 | 入参校验 + 中文提示 | `assets/cloud.js` → `validateEntry()`、`CODE_TEXT` |
 | 写入 + 查重 + 读回 + 统一形状 | `assets/cloud.js` → `postEntry()`、`insertEntry()` |
+| **读三列条目（含关联来源）** | **`assets/cloud.js` → `fetchEntries()`** |
+| **读失败时的中文说法** | **`assets/data.js` → `libraryFail`；`assets/app.js` → `failHint()`** |
+| **分组 + 云端字段还原** | **`assets/app.js` → `buildColumns()`、`entryFromRow()`** |
+| **「N 天前」的时间换算** | **`assets/rules.js` → `daysAgo()`** |
 | 来源下拉的数据 | `assets/cloud.js` → `fetchSources()` |
 | 长度上限等常量 | `assets/config.js` → `entry` 段 |
 | 表单与结果展示 | `assets/app.js` → `renderLibraryAdd()`、`submitEntry()`、`renderEntryResult()` |
-| 数据库那一层（GRANT / INSERT 策略 / 唯一约束 / 留痕列） | `db/schema.sql` 的 **Day 18 段** + 云端实际执行的 SQL |
+| 数据库那一层（GRANT / INSERT 策略 / 唯一约束 / 留痕列 / `detail` 列） | `db/schema.sql` 的 **Day 18 段** + 云端实际执行的 SQL |
 | 服务端留痕（`created_via`） | `db/schema.sql` 的 Day 18 段 ③④ 两条 |
 
 **相关文档**：
