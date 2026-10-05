@@ -237,6 +237,11 @@
       entryMsg = '';
     }
 
+    /* 地址提醒（Day 19 补 2）也跟着重画一遍：
+       上面那两个数字（这个地址下收藏几条 / 打卡几天）是会变的 ——
+       他刚在这个地址下点了个收藏，条数就得跟着变，不然这条提醒自己就在说谎。 */
+    renderAddrWarn();
+
     if (id === 'home') {
       /* 切回「今日」时把上一轮的反馈清掉 ——
          否则刚才那条「已记下…」会跟着页面回来，看着像刚点的。 */
@@ -341,6 +346,66 @@
     } else {
       add(box, '今天还没打卡');
     }
+  }
+
+  /* ============================================================
+     二′、地址提醒（Day 19 补 2 加）
+     ============================================================
+     为什么要有它，见 data.js 里 addrWarn 那段注释（一句话：
+     浏览器按网址隔离本地存储，换了地址打开记录就是空的，而页面上看不出来）。
+
+     职责分得很清：
+       · 判断「在不在正式地址上」→ rules.js 的 isOfficialOrigin（纯函数）
+       · 文案 → data.js 的 addrWarn
+       · 这里只负责**画**，以及取那两个必须当场算的数字 */
+  function renderAddrWarn() {
+    var box = document.getElementById('addr-warn');
+    if (!box) return;
+    clear(box);
+
+    /* 在正式网址上就整块藏起来（连清空都不留）——
+       正常用户看不到这条，所以它不占任何版面。 */
+    if (R.isOfficialOrigin(location.origin, C.officialOrigin)) {
+      box.setAttribute('hidden', '');
+      return;
+    }
+
+    var T = D.addrWarn;
+
+    /* ⚠️ 这两个数字**当场从本地存储算**，不写死、不缓存。
+       这条提醒的全部价值就是「说实话」——数字要是编的，它反而更害人。 */
+    var fav = S.countFavorites();
+    var days = 0;
+    var all = S.allDays();
+    for (var k in all) { if (Object.prototype.hasOwnProperty.call(all, k)) days++; }
+
+    /* 这次打开的是哪个地址。⚠️ file:// 的 location.origin 是字符串 'null'
+       （不是 null），直接显示会让人看到「你现在在这儿：null」——
+       所以本地文件这种最常踩的情况单独说人话。 */
+    var here;
+    if (location.protocol === 'file:') here = '本地文件（双击打开的那个 html）';
+    else if (location.origin && location.origin !== 'null') here = location.origin;
+    else here = location.protocol;
+
+    /* 按钮跳到「正式网址上对应的这一页」，不跳回首页 ——
+       他是在「我的」页发现收藏不见的，跳回首页等于让他自己再点一次。 */
+    var to = C.officialOrigin + '/' + (location.hash || '');
+
+    box.removeAttribute('hidden');
+    add(box, h('strong', { class: 'aw-title', text: T.title }));
+    add(box, h('p', { class: 'aw-text', text: (fav || days) ? T.has : T.empty }));
+    add(box, h('p', { class: 'aw-line' },
+      h('span', { class: 'aw-label', text: T.hereLabel }),
+      h('code', { class: 'aw-url', text: here })));
+    add(box, h('p', { class: 'aw-line' },
+      h('span', { class: 'aw-label', text: T.coLabel }),
+      h('code', { class: 'aw-url', text: C.officialOrigin + '/' })));
+    add(box, h('p', { class: 'aw-counts',
+      text: T.countsLabel.replace('{fav}', String(fav)).replace('{days}', String(days)) }));
+    /* 用 <a target="_blank"> 而不是 window.open：它就是一条普通链接，
+       右键能复制地址、按住 Ctrl 能新开窗口，行为比脚本可控。 */
+    add(box, h('a', { class: 'aw-btn', href: to, target: '_blank',
+      rel: 'noopener', text: T.openLabel }));
   }
 
   /* ============================================================
@@ -1902,6 +1967,9 @@
      ============================================================ */
   renderTabs();     /* 导航栏不依赖地址，先画 */
   renderMeta();     /* 元信息行 / 顶栏连续天数：三个视图共用，跟在哪一页无关 */
+  /* 地址提醒（Day 19 补 2）：只在「不是正式网址」时才会显示出来。
+     放在这里是因为它只跟地址有关，跟在哪一页无关。 */
+  renderAddrWarn();
   renderFoot();
 
   /* 地址一变就跟着切视图（点导航标签、浏览器前进/返回，都会走到这里） */

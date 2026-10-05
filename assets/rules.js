@@ -483,6 +483,25 @@
     return n;
   }
 
+  /* 判断「现在这个地址是不是正式网址」（Day 19 补 2 加）。
+
+     纯函数：只吃两个字符串，不碰 location、不碰页面 —— 跟本文件其它函数一个规矩。
+     取值的活儿留给 app.js（它才认识浏览器），这里只负责比。
+
+     ⚠️ 为什么**连协议一起比**，而不是只比域名：
+     在浏览器眼里 http 和 https 是**两个不同的来源**，登录态和本地存储都不通用。
+     只比域名的话，用 http 打开时会被误判成「就在正式地址上」——
+     于是**该说的提醒反而不说了**，那比不写这个判断更糟。
+
+     ⚠️ 取不到值（空串 / 老浏览器没有 origin）一律当「不是正式地址」：
+     宁可多说一句，也不许在真有问题的时候装作没事。 */
+  function isOfficialOrigin(origin, official) {
+    var a = String(origin === null || origin === undefined ? '' : origin);
+    var b = String(official === null || official === undefined ? '' : official);
+    if (!a || !b) return false;
+    return a.toLowerCase() === b.toLowerCase();
+  }
+
   window.GROWTH_RULES = {
     dayKey: dayKey,
     fromKey: fromKey,
@@ -515,7 +534,9 @@
     viewIdFromHash: viewIdFromHash,
     hashOfView: hashOfView,
     /* Day 17 加：地址里的 hot=N 条数限制（余力加练那条） */
-    hotLimitFromHash: hotLimitFromHash
+    hotLimitFromHash: hotLimitFromHash,
+    /* Day 19 补 2 加：当前地址是不是正式网址（纯函数，见上面那条注释） */
+    isOfficialOrigin: isOfficialOrigin
   };
 
 })();

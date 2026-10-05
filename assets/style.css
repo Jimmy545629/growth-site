@@ -181,6 +181,56 @@ body {
   background: var(--warm);
 }
 
+/* ---------- 地址提醒（Day 19 补 2 加） ----------
+   只在「当前地址不是正式网址」时出现 —— 正式网址上这条根本不显示，
+   所以它带来的一点点视觉重量不会影响正常使用。
+   配色用暖橙（--warm）：跟「打卡 / 收藏那类要你做点什么」同一个色系。 */
+.addr-warn {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  margin-bottom: var(--sp-5);
+  border-radius: var(--radius);
+  border: 1px solid rgba(255, 179, 71, 0.38);
+  background: rgba(255, 179, 71, 0.10);
+  font-size: var(--fs-3);
+}
+/* ⚠️ 必须自己补这一条：上面给 .addr-warn 写了 display: grid，
+   浏览器默认那条 [hidden]{display:none} **优先级低于**作者样式表，
+   不补的话 hidden 就失效了（Day 12 在别处踩过、Day 13 又在 .view 上补过一次）。 */
+.addr-warn[hidden] { display: none; }
+
+.aw-title { color: var(--warm); font-size: var(--fs-3); }
+.aw-text { margin: 0; color: var(--ink); }
+.aw-line {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2);
+  margin: 0; font-size: var(--fs-4); color: var(--ink-soft);
+}
+.aw-label { flex: none; color: var(--ink-faint); }
+/* 地址用等宽字：一眼能看出这是「地址」不是句子，也好一个字符一个字符地核对 */
+.aw-url {
+  font-family: ui-monospace, Consolas, "Courier New", monospace;
+  color: var(--ink);
+  word-break: break-all;
+}
+.aw-counts { margin: 0; font-size: var(--fs-4); color: var(--ink-faint); }
+/* 这个按钮是「让用户去另一个地址」的唯一出口。用 <a> 而不是 <button>：
+   它本质就是一条链接（右键能复制地址、能新开窗口），不是表单动作。 */
+.aw-btn {
+  justify-self: start;
+  display: inline-block;
+  min-height: 32px;                 /* 可点元素下限 32×32 */
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--warm), #e89a2a);
+  color: #241a06;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  line-height: 20px;
+  text-decoration: none;
+}
+.aw-btn:hover { filter: brightness(1.06); }
+
 /* ---------- 三张统计卡 ---------- */
 .stats {
   display: grid;

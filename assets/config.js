@@ -148,6 +148,20 @@ window.GROWTH_CONFIG = {
     publishableKey: 'wbpk_e8u8wxL7HunoPn0U8X5CS7_g94jZpavt3LlRkSgivp4QtXNPeP7p655'
   },
 
+  /* ---------- 「我本该住在哪个网址上」（Day 19 补 2 加） ----------
+
+     ⚠️ 它必须跟上面的 cloud.endpoint **是同一个值** —— 这两个说的是同一件事：
+     服务端按来源（Origin）认这个网页是谁，网页也按同一个地址认自己是谁。
+
+     为什么页面需要知道自己的正式地址：
+     浏览器的本地存储是**按网址来源隔离**的 —— 双击本地文件（file://）、
+     localhost、正式域名，是三只互不相通的抽屉。他用别的地址打开时，
+     收藏 / 打卡永远是空的，而**页面上一点都看不出来**
+     （2026-10-05 一晚上他问了三次「我的收藏没了」，三次都不是丢了）。
+     → 所以 app.js 拿它判断「我现在是不是住在正式地址上」，
+       不是的话就在页面上当面说清楚（文案在 data.js 的 addrWarn）。 */
+  officialOrigin: 'https://source-board.app.workbuddy.host',
+
   /* 「今日热点」区块（Day 17 加）。
      table 是云端那张表的名字；limit 是首页显示几条。
      为什么是 8：再长就把「今天该做的那三件事」挤下去了 ——
