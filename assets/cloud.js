@@ -1,89 +1,71 @@
-/* cloud.js —— 所有「读写云端」的逻辑。
+/* cloud.js —— **接口层**：页面跟云端之间说好的那几句话。
    ============================================================
-   建立于 Day 17（2026-10-03）。
+   建立于 Day 17（2026-10-03）；**Day 19（2026-10-05）瘦身过一次**。
 
-   ⚠️ **这是全项目唯一允许碰云端的文件。**
-   跟 store.js 是同一个思路（老项目 Day 6 规矩第 6 条）：
-   把「数据从哪来」这件事关在一个文件里，页面代码一个字都不用知道
-   数据是来自本地抽屉还是来自云端。以后要换数据源，只改这一个文件。
+   【Day 19 做了什么，一句话】
+   「查数据库」那一段（等 SDK、建连接、`.from().select()` / `.insert()`）
+   整段搬去了 `assets/db.js`。**本文件从此不知道 SDK 长什么样。**
+   这里只留下四件事：
+     ① 校验入参（validateEntry —— 纯函数）
+     ② 错误码换成中文（CODE_TEXT —— 页面上提示语的**唯一**来源）
+     ③ 编排（postEntry：先校验 → 再查重 → 再写入 → 再读回）
+     ④ 保证返回的形状跟契约一致（docs/api-contract.md）
 
-   【它读什么（Day 17 → Day 18 扩）】
-   云端数据库的 `hot_topics` 表 —— 每日真实热搜快照（来源：百度实时热搜）。
-   这张表**只有 SELECT 权限**（Day 16 定的边界），网页一行也写不进去。
+   ⚠️ **本文件 = 页面契约的唯一实现**。
+   对外那 6 个名字（fetchHotTopics / fetchEntries / fetchSources /
+   postEntry / validateEntry / localDate）和它们返回的 JSON 字段，
+   **一个字都不许改** —— 页面（app.js）和 docs/api-contract.md 都照着它写。
+   要改就得先改契约那份文档，两边一起改。
 
-   Day 18 起又多读两张：
-   · `contents` 表（kind='entry' 那部分）—— 内容库三列的条目
-   · `sources` 表 —— 来源名单（「新增一条」的下拉要填真 id）
+   【为什么要这么分】
+   把「我们的规矩」（校验、中文说法、契约形状）和「数据库的事」（表、列、查询）
+   放在不同文件里，改一边不会顺手碰坏另一边。
+   ⚠️ 拆的时候刻意守住一条：**只搬家，不改行为** ——
+   所以 app.js **一行都没改**（这正是拆得对不对的判据）。
 
-   【它写什么（Day 18）】
-   云端数据库的 `contents` 表 —— 内容库的条目。
-   ⚠️ Day 18 给这张表开了一个**很窄**的口子：只给 INSERT（新增），
-   **不给** UPDATE / DELETE。所以「谁能改、谁能删」那两扇门依然是关着的。
-   ⚠️ 为什么能写：这个项目不做登录（PRD 第 2 条），页面用的是匿名身份。
-   代价是**任何打开网页的人都能调这个新增接口**。这条是**知情之后才开的口子**，
-   不是漏想的 —— 写进了 docs/api-contract.md 第三节。
-
-   【怎么调云端】
-   用官方 SDK（@tencent-ai/workbuddy-cloud-sdk 的浏览器版本）。
-   ⚠️ 这是**唯一**正确的调用方式，不许自己手写 fetch 去拼 /.cloud/…
-   的地址 —— 那样会丢掉 SDK 负责的鉴权和会话管理。
+   【三层往下怎么走】
+     页面 app.js
+       ↓ 只调 GROWTH_CLOUD 这几个函数
+     接口层 cloud.js（本文件）—— 校验 / 中文提示 / 编排 / 契约形状
+       ↓ 只调 GROWTH_DB 那几个函数
+     数据访问层 db.js —— 等 SDK / 建连接 / 查什么表取哪些列
+       ↓
+     云端数据库
 
    【断网 / 云端读不到会怎样】
    **不白屏、不报错、不假装有数据。**
-   返回 { ok:false, reason:… }，由 app.js 决定把「这次没读到」如实说出来，
+   读接口返回 { ok:false, reason:… }，由 app.js 决定把「这次没读到」如实说出来，
    并给一个「重试」的出口。宁可说「这次没读到」，也不要编一条数据顶上
    （这是 PRD 硬约束 C4 的精神：不许编）。
    ⚠️ Day 18 起，内容库三列**不再退回本地内容** —— 因为本地那份已经删了，
    内容只有云端一份。读不到就是读不到，页面如实说，不是「降级显示旧数据」。
 
-   加载顺序（见 index.html）：config.js → cloud.js → rules.js → store.js
-   → data.js → app.js
+   加载顺序（见 index.html）：config.js → db.js → cloud.js → rules.js
+   → store.js → data.js → app.js
    ============================================================ */
 
 (function () {
   'use strict';
 
   var C = window.GROWTH_CONFIG;
+  /* ⚠️ 本文件所有的「读云端 / 写云端」都通过它 —— db.js 是全项目唯一
+     跟云端数据库说话的文件。这里连 window.WorkBuddyCloud 都不出现。 */
+  var DB = window.GROWTH_DB;
 
-  /* SDK 的浏览器版本用 <script> 引进来，挂在 window.WorkBuddyCloud 上。
-     ⚠️ ⚠️ 这里踩过一个真坑（Day 17，实测，比想象中隐蔽）：
-     一开始写的是「跑的时候看一眼，没有就返回 no-sdk」。
-     结果首屏**经常**报「云端组件没加载成功」，而实际上 SDK 是好的 ——
-     因为外部脚本是异步下载的，**我的代码可能比它先跑到**。
-     那一刻 window.WorkBuddyCloud 还不存在，我就把「没有」当成了结论。
-     → 正确做法：**等它一会儿**（轮询几秒），而不是看一眼就下结论。
-     这条值得记住：**「现在还没有」和「根本没有」是两件事**，
-     代码里必须分清楚，否则会偶发、难复现、看起来像网络问题。 */
-  function waitForSdk(timeoutMs) {
-    var limit = timeoutMs || 6000;
-    return new Promise(function (resolve) {
-      var t0 = Date.now();
-      (function tick() {
-        if (window.WorkBuddyCloud) return resolve(window.WorkBuddyCloud);
-        if (Date.now() - t0 >= limit) return resolve(null);
-        setTimeout(tick, 120);
-      })();
-    });
+  /* ============================================================
+     一、读接口
+     ============================================================
+     三条读接口（热搜 / 内容库三列 / 来源名单）**故意共用同一种形状**：
+     { ok:true, rows:[…] } 或 { ok:false, reason:… }。
+     这样调用方只要记一套「ok + reason」，不用为多一个接口多学一种写法。
+     ============================================================ */
+
+  /* 读失败时的形状。detail 只进控制台、不上页面（契约 2.4）。 */
+  function readFail(reason, detail) {
+    return { ok: false, reason: reason, detail: detail };
   }
 
-  /* 客户端只建一次（建两次会有两个会话，白白多打一倍请求）。 */
-  var client = null;
-
-  function buildClient(WB) {
-    if (client) return client;
-    try {
-      client = WB.createWorkBuddyCloud({
-        endpoint: C.cloud.endpoint,
-        oauthRelayBaseUrl: C.cloud.oauthRelayBaseUrl,
-        publishableKey: C.cloud.publishableKey
-      });
-    } catch (e) {
-      client = null;
-    }
-    return client;
-  }
-
-  /* ---------- 读当日热搜 ----------
+  /* ---------- 01 · 读当日热搜 ----------
      入参：limit（要几条，默认按 config 里那个数）
            ⚠️ 这个 limit 来自地址里的 '?hot=N'（Day 17 余力加练），
            由 rules.js 的 hotLimitFromHash() 校验过（1~30 的整数），
@@ -94,119 +76,69 @@
   function fetchHotTopics(limit) {
     var n = limit || C.hot.limit;
 
-    /* 先等 SDK 到位（可能只等几十毫秒，也可能要几秒）。
-       等不到才认「真的没有」—— 见上面 waitForSdk 的注释。 */
-    return waitForSdk().then(function (WB) {
-      if (!WB) return { ok: false, reason: 'no-sdk' };
+    return DB.selectHotTopics().then(function (res) {
+      if (!res.ok) return readFail(res.reason, res.error);
 
-      var c = buildClient(WB);
-      if (!c) return { ok: false, reason: 'no-client' };
+      var all = res.rows || [];
+      if (!all.length) return readFail('empty');
 
-      /* 用 SDK 的数据库接口查。写法跟 supabase-js 一样：
-         from(表).select(列).order(排序).limit(条数)
-         结果装在 { data, error } 里。
+      /* 取库里**最新那一天**的整份榜单，而不是死认「今天」。
+         理由：首页不该在零点过后就空掉；而且如果某天忘了跑同步任务，
+         显示最近一份「当日榜单」比显示空白有用得多。
+         同时把日期一起返回，页面上要如实标出这份数据是哪天的。
 
-         ⚠️ 按日期过滤这件事没写进查询里，而是取回后在前端筛：
-         因为「今天」是按**浏览器本地时间**算的（见下面 localDate()），
-         而数据库的 topic_date 是日期类型。让数据库来判断「今天」，
-         时区会错位 —— README 里那条「日期一律用本地时间拼」的坑就是这样来的。 */
-      return c.database
-        .from(C.hot.table)
-        .select('id, topic_date, rank, title, summary, hot_value, hot_text, url, source_key, source_name')
-        .order('rank', { ascending: true })
-        .limit(400)
-        .then(function (res) {
-          if (res && res.error) return { ok: false, reason: 'query-failed', detail: res.error };
-          var all = (res && res.data) || [];
-          if (!all.length) return { ok: false, reason: 'empty' };
+         ⚠️ 「今天是哪天」这件事**必须在这一层按浏览器本地时间算**，
+         不能交给数据库 —— topic_date 是日期类型，让数据库判「今天」时区会错位。 */
+      var latest = String(all[0].topic_date || '').slice(0, 10);
+      var rows = all.filter(function (r) {
+        return String(r.topic_date || '').slice(0, 10) === latest;
+      });
 
-          /* 取库里**最新那一天**的整份榜单，而不是死认「今天」。
-             理由：首页不该在零点过后就空掉；而且如果某天忘了跑同步任务，
-             显示最近一份「当日榜单」比显示空白有用得多。
-             同时把日期一起返回，页面上要如实标出这份数据是哪天的。 */
-          var latest = String(all[0].topic_date || '').slice(0, 10);
-          var rows = all.filter(function (r) {
-            return String(r.topic_date || '').slice(0, 10) === latest;
-          });
-
-          return { ok: true, rows: rows.slice(0, n), date: latest, total: rows.length };
-        });
+      return { ok: true, rows: rows.slice(0, n), date: latest, total: rows.length };
     }).catch(function (e) {
-      return { ok: false, reason: 'query-failed', detail: e };
+      return readFail('query-failed', e);
     });
   }
 
-  /* ---------- 读来源列表（Day 18 加） ----------
-     为什么需要它：「新增一条」那张表单的下拉要填 sources 里的**真 id**。
-     填一个库里不存在的东西，写进去会被外键顶回来 ——
-     所以这份名单必须现读，不能在本地另写一份（那就是第二个来源了）。
-
-     出参：{ ok:true, rows:[{ id, name, column_key, kind }] }
-           { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty' }
-     ⚠️ 形状跟 fetchHotTopics **故意保持一致**：调用方只需要记一套
-     「ok + reason」，不用为了多一个接口多学一种写法。 */
-  function fetchSources() {
-    return waitForSdk().then(function (WB) {
-      if (!WB) return { ok: false, reason: 'no-sdk' };
-
-      var c = buildClient(WB);
-      if (!c) return { ok: false, reason: 'no-client' };
-
-      return c.database
-        .from(C.entry.sourceTable)
-        .select('id, name, column_key, kind')
-        .order('column_key', { ascending: true })
-        .then(function (res) {
-          if (res && res.error) return { ok: false, reason: 'query-failed', detail: res.error };
-          var rows = (res && res.data) || [];
-          if (!rows.length) return { ok: false, reason: 'empty' };
-          return { ok: true, rows: rows };
-        });
-    }).catch(function (e) {
-      return { ok: false, reason: 'query-failed', detail: e };
-    });
-  }
-
-  /* ---------- 读内容库三列的条目（Day 18 加） ----------
+  /* ---------- 03 · 读内容库三列的条目（Day 18 加） ----------
      为什么需要它：Day 18 把「内容库三列」从「读本地 data.js」改成「读云端」。
      改的原因很直白 ——「新增一条」写的是云端，榜单读的是本地，
      两处内容各活各的，加完一条在榜单里看不见。
      那是最容易让人以为「页面坏了」的一种设计。
 
-     读的是 contents 表里 kind='entry' 的行，**并顺带把来源那张表带出来**
-     （sources 的 name / column_key）—— 因为「这条属于哪一栏」这件事
-     存在 sources.column_key 上，不在 contents 表里。
-
      出参：{ ok:true, rows:[ {…contents 那一行的字段…, sources:{…}} ], total }
            { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty' }
      ⚠️ 这一层**只取数、不分组**：分组是页面的事。
-        cloud.js 的职责从始至终只有一件：把数据原样取回来。 */
+        「N 天前」怎么算也是页面的事（rules.js 的 daysAgo()）。
+        这里只负责把数据原样带回去，形状跟契约一致。 */
   function fetchEntries() {
-    return waitForSdk().then(function (WB) {
-      if (!WB) return { ok: false, reason: 'no-sdk' };
+    return DB.selectEntries().then(function (res) {
+      if (!res.ok) return readFail(res.reason, res.error);
 
-      var c = buildClient(WB);
-      if (!c) return { ok: false, reason: 'no-client' };
-
-      return c.database
-        .from(C.entry.table)
-        /* ⚠️ 尾巴上那个 sources(…) 是 PostgREST 的「一次查两张表」写法：
-           靠 contents.source_id → sources.id 那个外键，把来源的字段一并取回。
-           它比「查两次、再在页面里按 id 对上」稳 ——
-           两次查之间库要是变了，拼出来的东西就是错的。 */
-        .select('id, source_id, kind, title, tag, media, dur, url, summary, detail, created_at, sources(name, platform, column_key, note)')
-        .eq('kind', C.entry.kind)
-        /* 新的排前面。这样「刚加的那条」永远在第一栏最上面，一眼看得见。 */
-        .order('created_at', { ascending: false })
-        .limit(200)
-        .then(function (res) {
-          if (res && res.error) return { ok: false, reason: 'query-failed', detail: res.error };
-          var rows = (res && res.data) || [];
-          if (!rows.length) return { ok: false, reason: 'empty' };
-          return { ok: true, rows: rows, total: rows.length };
-        });
+      var rows = res.rows || [];
+      if (!rows.length) return readFail('empty');
+      return { ok: true, rows: rows, total: rows.length };
     }).catch(function (e) {
-      return { ok: false, reason: 'query-failed', detail: e };
+      return readFail('query-failed', e);
+    });
+  }
+
+  /* ---------- 04 · 读来源列表（Day 18 加） ----------
+     为什么需要它：「新增一条」那张表单的下拉要填 sources 里的**真 id**。
+     填一个库里不存在的东西，写进去会被外键顶回来 ——
+     所以这份名单必须现读，不能在本地另写一份（那就是第二个来源了）。
+
+     出参：{ ok:true, rows:[{ id, name, column_key, kind }] }
+           { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty' } */
+  function fetchSources() {
+    return DB.selectSources().then(function (res) {
+      if (!res.ok) return readFail(res.reason, res.error);
+
+      var rows = res.rows || [];
+      if (!rows.length) return readFail('empty');
+      return { ok: true, rows: rows };
+    }).catch(function (e) {
+      return readFail('query-failed', e);
     });
   }
 
@@ -300,42 +232,18 @@
     return C.entry.idPrefix + '-' + day + '-' + tail;
   }
 
-  /* ---------- 真正写进去，并把库里那一行读回来 ----------
-     ⚠️ `.select()` 不能省：PostgREST 的写法里，insert 后面接 select
-     才会**把写进去的那一行返回**（Prefer: return=representation）。
-     不接的话只知道「没报错」，根本不知道存成了什么。 */
-  function insertEntry(c, row) {
-    return c.database
-      .from(C.entry.table)
-      .insert(row)
-      .select()
-      .then(function (res) {
-        if (res && res.error) {
-          /* 23505 = 唯一约束 / 主键冲突。**第二道防线在这里落地**：
-             两个人同时提交同一条时，上面那次查重拦不住，数据库会把它顶回来。 */
-          if (String(res.error.code) === '23505') return fail('DUPLICATE', res.error);
-          return fail('WRITE_FAILED', res.error);
-        }
-
-        var got = (res && res.data) || [];
-        /* ⚠️⚠️ 空数组 = 一行也没动 = **没成功**（契约 2.6 ②）。
-           这是这一块最容易写错的地方：RLS 把写入挡住时，PostgREST
-           **不给 error**，只给一个空的 data。当成成功处理，就会出现
-           「页面说存好了、库里什么都没有」——比报错还糟。 */
-        if (!got.length) return fail('WRITE_FAILED', '数据库没有返回写入后的那一行');
-
-        var r = got[0];
-        return {
-          ok: true,
-          id: r.id,
-          title: r.title,          /* ← 全部取**库里的值**，不是入参的副本 */
-          source_id: r.source_id,
-          kind: r.kind,
-          media: r.media,
-          created_at: r.created_at,
-          row: r
-        };
-      });
+  /* ---------- 把 db.js 的写入结果，翻译成契约要的形状 ----------
+     ⚠️ 这一步就是「接口层」的核心动作：底下的 reason 是**数据库的说法**，
+     契约里的 code 是**这个项目的说法**，翻译只发生在这一处。
+     ① no-sdk / no-client：连接就没建起来，跟数据库无关；
+     ② 23505：唯一约束顶回来的（**第二道防线** —— 两个人同时提交同一条时，
+        上面那次查重拦不住，数据库会把它拒掉）；
+     ③ 其余（含 empty-result：一行也没写成）：一律 WRITE_FAILED。 */
+  function entryWriteFail(res) {
+    if (res.reason === 'no-sdk') return fail('NO_SDK');
+    if (res.reason === 'no-client') return fail('NO_CLIENT');
+    if (res.error && String(res.error.code) === '23505') return fail('DUPLICATE', res.error);
+    return fail('WRITE_FAILED', res.error || res.reason);
   }
 
   /* ---------- 对外的主函数 ----------
@@ -347,39 +255,48 @@
     var v = validateEntry(input);
     if (!v.ok) return Promise.resolve(v);
 
-    return waitForSdk().then(function (WB) {
-      if (!WB) return fail('NO_SDK');
-      var c = buildClient(WB);
-      if (!c) return fail('NO_CLIENT');
+    var row = {
+      id: makeEntryId(),
+      source_id: v.value.sourceId,
+      kind: C.entry.kind,
+      title: v.value.title,
+      media: v.value.media,
+      summary: v.value.summary || null
+      /* ⚠️ created_at **故意不传**：表里有 DEFAULT now()，不传才会用默认值。
+         传 null 不算「不传」—— 它会把默认值覆盖成 NULL（官方文档专门警告过这条）。
+         同理 id：这项目主键是 TEXT、没有自增，所以由我们主动给。 */
+    };
 
-      var row = {
-        id: makeEntryId(),
-        source_id: v.value.sourceId,
-        kind: C.entry.kind,
-        title: v.value.title,
-        media: v.value.media,
-        summary: v.value.summary || null
-        /* ⚠️ created_at **故意不传**：表里有 DEFAULT now()，不传才会用默认值。
-           传 null 不算「不传」—— 它会把默认值覆盖成 NULL（官方文档专门警告过这条）。
-           同理 id：这项目主键是 TEXT、没有自增，所以由我们主动给。 */
-      };
+    /* 第一道防线：先查一次「同一个来源下这个标题有没有」。
+       目的**不是安全**（页面代码可以被绕过），而是**给一句准的中文提示** ——
+       否则只能等数据库抛一个 23505，用户看到的是一串英文错误码。 */
+    return DB.selectEntryByTitle(row.source_id, row.title).then(function (res) {
+      /* ⚠️ 连接没建起来：直接说，不用再白跑一次写入。 */
+      if (res.reason === 'no-sdk') return fail('NO_SDK');
+      if (res.reason === 'no-client') return fail('NO_CLIENT');
 
-      /* 第一道防线：先查一次「同一个来源下这个标题有没有」。
-         目的**不是安全**（页面代码可以被绕过），而是**给一句准的中文提示** ——
-         否则只能等数据库抛一个 23505，用户看到的是一串英文错误码。 */
-      return c.database
-        .from(C.entry.table)
-        .select('id')
-        .eq('source_id', row.source_id)
-        .eq('title', row.title)
-        .limit(1)
-        .then(function (res) {
-          /* ⚠️ 查重自己失败时，**既不当作「没重复」放行、也不当作「重复」误拦** ——
-             直接交给第二道防线去判。这一步本来就只是优化，它坏了不该改变结论。 */
-          if (res && res.error) return insertEntry(c, row);
-          if (res && res.data && res.data.length) return fail('DUPLICATE');
-          return insertEntry(c, row);
-        });
+      /* 有重复 → 当场拦下，不写。 */
+      if (res.ok && res.rows && res.rows.length) return fail('DUPLICATE');
+
+      /* ⚠️ 查重自己失败时（res.ok 为假、但连接是好的）：
+         **既不当作「没重复」放行、也不当作「重复」误拦** ——
+         直接交给第二道防线（数据库的唯一约束）去判。
+         这一步本来就只是优化，它坏了不该改变结论。 */
+      return DB.insertContent(row).then(function (w) {
+        if (!w.ok) return entryWriteFail(w);
+
+        var r = w.row;
+        return {
+          ok: true,
+          id: r.id,
+          title: r.title,          /* ← 全部取**库里的值**，不是入参的副本 */
+          source_id: r.source_id,
+          kind: r.kind,
+          media: r.media,
+          created_at: r.created_at,
+          row: r
+        };
+      });
     }).catch(function (e) {
       /* 意外异常（比如 SDK 内部抛错）也收成一个统一的失败形状，不往页面上抛。 */
       return fail('WRITE_FAILED', String((e && e.message) || e));

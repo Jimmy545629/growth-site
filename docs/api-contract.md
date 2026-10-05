@@ -19,12 +19,29 @@
 | **01** | GET | `GROWTH_CLOUD.fetchHotTopics(limit)` | 读「当日热搜」那一份快照 | `assets/cloud.js` | Day 17 |
 | **02** | POST | `GROWTH_CLOUD.postEntry(input)` | **新增一条内容**，写进云端 `contents` 表 | `assets/cloud.js` | **Day 18** |
 | **03** | GET | `GROWTH_CLOUD.fetchEntries()` | **读内容库三列的条目**（`contents` 表 `kind='entry'` ＋ 关联 `sources`） | `assets/cloud.js` | **Day 18** |
+| **04** | GET | `GROWTH_CLOUD.fetchSources()` | 读来源名单（「新增一条」下拉的选项） | `assets/cloud.js` | **Day 18** |
 
-⚠️ **三条接口都住在 `assets/cloud.js`** —— 这是全项目**唯一**允许碰云端的文件
-（跟 `store.js` 是全项目唯一碰 localStorage 的文件，是同一个思路）。
+⚠️ **「建在哪」这一列 Day 19 之后要看仔细**：四条接口**对外的名字没变、一个字段也没变**，
+但它们**底下那层**换了文件 —— 见下面这张图。
+
+```
+页面 app.js
+  ↓ 只调 GROWTH_CLOUD（就是上表这四个名字）
+assets/cloud.js   ← 【接口层】校验入参 / 编中文提示 / 编排 / 保证返回形状 == 这份契约
+  ↓ 只调 GROWTH_DB
+assets/db.js      ← 【数据访问层】等 SDK / 建连接 / 查什么表取哪些列（Day 19 从 cloud.js 拆出来的）
+  ↓
+云端数据库
+```
+
+⚠️ **Day 19 之前，上面两层是一个文件**（都叫 `cloud.js`）。
+那天把「查数据库」整段搬去了 `assets/db.js`，`cloud.js` 只留契约这一侧的事。
+→ **对调用方（页面）来说，这件事完全看不出来**：接口名字、入参、返回的 JSON 字段，
+一个字都没动；`app.js` 那一次**一行都没改**。
+（这正是「契约不许动」的意思 —— 搬家不改承诺。）
 
 ⚠️ **调用方式**：页面代码一律用官方 SDK，**不许自己手写 `fetch` 去拼 `/.cloud/…` 的地址**，
-那样会丢掉 SDK 负责的鉴权和会话管理。
+那样会丢掉 SDK 负责的鉴权和会话管理。SDK 只被 `assets/db.js` 一个文件用。
 
 ---
 
@@ -193,7 +210,9 @@ DATABASE_42501   new row violates row-level security policy for table "contents"
 ⚠️ **这一层只取数、不分组、不做业务判断**：
 分组（按 `column_key` 分三栏）、把云端字段还原成页面上要的形状，
 都在 `app.js` 的 `buildColumns()` / `entryFromRow()`。
-`cloud.js` 的职责从始至终只有一件：**把数据原样取回来**。
+取数的职责只有一件：**把数据原样取回来**
+（Day 19 之前这个职责写在 `cloud.js` 里，Day 19 起搬到了 `db.js`；
+`cloud.js` 只在取回来之后判「空不空、算不算失败」并换成契约要的形状）。
 
 ### 2b.4 `reason` 的四种取值
 
@@ -245,22 +264,31 @@ Day 18 之前，内容库读的是**本地 `data.js`**（写死的示例内容�
 
 ## 四、这份契约对应到代码里的哪几行
 
-| 契约里的东西 | 落在哪 |
+| 契约里的东西 | 落在哪（**Day 19 之后**） |
 | --- | --- |
 | 入参校验 + 中文提示 | `assets/cloud.js` → `validateEntry()`、`CODE_TEXT` |
-| 写入 + 查重 + 读回 + 统一形状 | `assets/cloud.js` → `postEntry()`、`insertEntry()` |
-| **读三列条目（含关联来源）** | **`assets/cloud.js` → `fetchEntries()`** |
-| **读失败时的中文说法** | **`assets/data.js` → `libraryFail`；`assets/app.js` → `failHint()`** |
-| **分组 + 云端字段还原** | **`assets/app.js` → `buildColumns()`、`entryFromRow()`** |
-| **「N 天前」的时间换算** | **`assets/rules.js` → `daysAgo()`** |
-| 来源下拉的数据 | `assets/cloud.js` → `fetchSources()` |
+| 编排：先校验 → 再查重 → 再写入 → 再读回 | `assets/cloud.js` → `postEntry()` |
+| 数据库原始错误码 → 契约错误码（23505→`DUPLICATE` 等） | `assets/cloud.js` → `entryWriteFail()` |
+| 生成主键（`u-YYYY-MM-DD-xxx`） | `assets/cloud.js` → `makeEntryId()` |
+| **读三列条目（含关联来源）** | `assets/cloud.js` → `fetchEntries()` ← 调 `db.js` 的 `selectEntries()` |
+| 来源下拉的数据 | `assets/cloud.js` → `fetchSources()` ← 调 `db.js` 的 `selectSources()` |
+| 读当日热搜 | `assets/cloud.js` → `fetchHotTopics()` ← 调 `db.js` 的 `selectHotTopics()` |
+| **「查数据库」这件事本身**：等 SDK / 建连接 / 表名 / 列名 / 排序 / 条数 / `.insert()` | **`assets/db.js`** → `selectHotTopics()` / `selectEntries()` / `selectSources()` / `selectEntryByTitle()` / `insertContent()` |
+| **写失败时把「空数组」当成没写成**（契约 2.6 ②） | **`assets/db.js` → `insertContent()` 返回 `empty-result`**，再由 `cloud.js` 翻成 `WRITE_FAILED` |
+| **读失败时的中文说法** | `assets/data.js` → `libraryFail`；`assets/app.js` → `failHint()` |
+| **分组 + 云端字段还原** | `assets/app.js` → `buildColumns()`、`entryFromRow()` |
+| **「N 天前」的时间换算** | `assets/rules.js` → `daysAgo()` |
 | 长度上限等常量 | `assets/config.js` → `entry` 段 |
 | 表单与结果展示 | `assets/app.js` → `renderLibraryAdd()`、`submitEntry()`、`renderEntryResult()` |
 | 数据库那一层（GRANT / INSERT 策略 / 唯一约束 / 留痕列 / `detail` 列） | `db/schema.sql` 的 **Day 18 段** + 云端实际执行的 SQL |
 | 服务端留痕（`created_via`） | `db/schema.sql` 的 Day 18 段 ③④ 两条 |
 
+⚠️ **上表为什么分得这么细**：一份契约要能查到「这句话由哪几行代码实现」，
+坏了才知道去哪儿修。Day 19 之后，**跟数据库打交道的那几行全在 `db.js` 一个文件里**。
+
 **相关文档**：
 
-- `docs/day18-post-endpoint.md` —— 这一天的完整记录（含「今日一问」的答案）
+- `docs/day19-layering.md` —— **Day 19**：这次拆分（哪段代码从哪儿搬到了哪儿）+ 全接口回归记录
+- `docs/day18-post-endpoint.md` —— Day 18：第一个 POST 接口的完整记录（含「今日一问」的答案）
 - `db/schema.sql` —— 数据库结构 + 权限，改动都带理由
 - `docs/CHANGELOG.md` —— 按天的开发日志

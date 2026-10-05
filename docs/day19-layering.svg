@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 680" width="1000" height="680" role="img" aria-label="Day 19 分层示意图：查数据库的代码从 cloud.js 搬到 db.js">
+  <defs>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4c8dff"/>
+    </marker>
+    <marker id="arwW" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ffb347"/>
+    </marker>
+  </defs>
+
+  <rect width="1000" height="680" fill="#0b1020"/>
+
+  <text x="40" y="48" fill="#e8ecf6" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="24" font-weight="700">Day 19 ｜ 把「查数据库」这段代码拆出去</text>
+  <text x="40" y="76" fill="#7d8aa8" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13">大学生成长网站 · 2026-10-05 · 只搬家，不改行为 —— 接口的名字 / 入参 / 返回字段一个字没动</text>
+
+  <text x="40" y="120" fill="#a8b3cc" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="14" font-weight="700">拆之前（Day 17–18）：一个文件干了四件事</text>
+  <text x="530" y="120" fill="#a8b3cc" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="14" font-weight="700">拆之后（Day 19）：三层，各管各的</text>
+
+  <rect x="40" y="130" width="420" height="330" rx="14" fill="#141a2e" stroke="rgba(255,255,255,0.08)"/>
+  <text x="58" y="162" fill="#e8ecf6" font-family="Consolas, monospace" font-size="16" font-weight="700">assets/cloud.js</text>
+  <text x="442" y="162" fill="#ffb347" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="12" text-anchor="end">一个文件，四份职责</text>
+
+  <rect x="58" y="176" width="384" height="62" rx="10" fill="#1a2238" stroke="rgba(255,255,255,0.08)"/>
+  <text x="74" y="200" fill="#e8ecf6" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13.5">① 等云端 SDK 到位 / 把连接建起来</text>
+  <text x="74" y="222" fill="#7d8aa8" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="11.5">waitForSdk() · buildClient()</text>
+
+  <rect x="58" y="250" width="384" height="62" rx="10" fill="#241b0d" stroke="#ffb347"/>
+  <text x="74" y="274" fill="#ffd79a" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13.5" font-weight="700">② 查数据库（今天要搬走的就是这段）</text>
+  <text x="74" y="296" fill="#ffb347" font-family="Consolas, monospace" font-size="11.5">.from(表) .select(列) .eq() .order() .limit() .insert()</text>
+
+  <rect x="58" y="324" width="384" height="62" rx="10" fill="#1a2238" stroke="rgba(255,255,255,0.08)"/>
+  <text x="74" y="348" fill="#e8ecf6" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13.5">③ 校验入参 + 错误码换成中文</text>
+  <text x="74" y="370" fill="#7d8aa8" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="11.5">validateEntry() · CODE_TEXT（9 个错误码）</text>
+
+  <rect x="58" y="398" width="384" height="62" rx="10" fill="#1a2238" stroke="rgba(255,255,255,0.08)"/>
+  <text x="74" y="422" fill="#e8ecf6" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13.5">④ 编排 + 保证返回形状跟契约一致</text>
+  <text x="74" y="444" fill="#7d8aa8" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="11.5">postEntry()：校验 → 查重 → 写入 → 读回</text>
+
+  <line x1="250" y1="460" x2="250" y2="556" stroke="#ffb347" stroke-width="2" marker-end="url(#arwW)"/>
+  <text x="266" y="516" fill="#ffb347" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="12">搬走这段之后，页面照旧</text>
+
+  <rect x="530" y="130" width="430" height="50" rx="10" fill="#1a2238" stroke="rgba(255,255,255,0.08)"/>
+  <text x="552" y="161" fill="#e8ecf6" font-family="Consolas, monospace" font-size="15" font-weight="700">assets/app.js</text>
+  <text x="938" y="161" fill="#7d8aa8" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="12" text-anchor="end">页面：画 + 收点击（这次一行没改）</text>
+
+  <line x1="745" y1="180" x2="745" y2="212" stroke="#4c8dff" stroke-width="2" marker-end="url(#arw)"/>
+  <text x="758" y="203" fill="#7d8aa8" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="11.5">只调 GROWTH_CLOUD</text>
+
+  <rect x="530" y="216" width="430" height="104" rx="10" fill="#141a2e" stroke="#4c8dff"/>
+  <text x="552" y="244" fill="#e8ecf6" font-family="Consolas, monospace" font-size="15" font-weight="700">assets/cloud.js</text>
+  <text x="938" y="244" fill="#4c8dff" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13" text-anchor="end">接口层</text>
+  <text x="552" y="272" fill="#a8b3cc" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="12.5">③ 校验入参 · 错误码换中文 · 编中文提示</text>
+  <text x="552" y="296" fill="#a8b3cc" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="12.5">④ 编排 + 保证返回形状 == docs/api-contract.md</text>
+  <text x="552" y="314" fill="#7d8aa8" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="11.5">从此它不知道 SDK 长什么样</text>
+
+  <line x1="745" y1="320" x2="745" y2="352" stroke="#4c8dff" stroke-width="2" marker-end="url(#arw)"/>
+  <text x="758" y="343" fill="#7d8aa8" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="11.5">只调 GROWTH_DB</text>
+
+  <rect x="530" y="356" width="430" height="104" rx="10" fill="#0f1f33" stroke="#34d399"/>
+  <rect x="862" y="344" width="76" height="22" rx="11" fill="#34d399"/>
+  <text x="900" y="359" fill="#06281f" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="12" font-weight="700" text-anchor="middle">Day 19 新建</text>
+  <text x="552" y="382" fill="#e8ecf6" font-family="Consolas, monospace" font-size="15" font-weight="700">assets/db.js</text>
+  <text x="938" y="382" fill="#34d399" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13" text-anchor="end">数据访问层</text>
+  <text x="552" y="410" fill="#a8b3cc" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="12.5">① 等 SDK · 建连接 　 ② 查数据库</text>
+  <text x="552" y="434" fill="#7d8aa8" font-family="Consolas, monospace" font-size="11.5">selectHotTopics / selectEntries / selectSources</text>
+  <text x="552" y="452" fill="#7d8aa8" font-family="Consolas, monospace" font-size="11.5">selectEntryByTitle / insertContent</text>
+
+  <line x1="745" y1="460" x2="745" y2="556" stroke="#4c8dff" stroke-width="2" marker-end="url(#arw)"/>
+  <text x="758" y="516" fill="#7d8aa8" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="11.5">用官方 SDK 调云端</text>
+
+  <rect x="40" y="560" width="920" height="62" rx="12" fill="#141a2e" stroke="rgba(255,255,255,0.08)"/>
+  <text x="60" y="588" fill="#e8ecf6" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="14.5" font-weight="700">云端数据库</text>
+  <text x="60" y="610" fill="#7d8aa8" font-family="Consolas, monospace" font-size="12">contents（内容库 · 只给 INSERT）　 sources（来源名单）　 hot_topics（每日热搜 · 只给 SELECT）</text>
+  <text x="938" y="610" fill="#7d8aa8" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="12" text-anchor="end">表名 / 列名只出现在 db.js 一处</text>
+
+  <text x="40" y="652" fill="#a8b3cc" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="12.5">接口 01–04 的名字、入参、返回 JSON 字段：一个字都没改（契约不许动）→ 所以页面 app.js 那次一行都没改 —— 这就是「搬家没改承诺」的证据。</text>
+</svg>

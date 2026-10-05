@@ -152,7 +152,7 @@
   </div>
 
   <!-- 加载顺序不能换：后面每个文件一开头就要用前面那个。
-       云端 SDK（Day 17 加）必须排在 cloud.js 前面 —— cloud.js 要用它挂出来的
+       云端 SDK（Day 17 加）必须排在 db.js 前面 —— db.js 要用它挂出来的
        window.WorkBuddyCloud。用 CDN 而不是装包，是因为本项目纯静态、零构建
        （PRD 硬约束 C2）：引 npm 包就要多一个构建步骤，对「双击就能跑」是破坏。
 
@@ -166,7 +166,11 @@
 
   <!-- 所有常量 -->
   <script src="assets/config.js"></script>
-  <!-- 所有云端读写（唯一碰云端的文件） -->
+  <!-- 【数据访问层】Day 19 从 cloud.js 拆出来的：等 SDK、建连接、查什么表取哪些列。
+       全项目**唯一**跟云端数据库说话的文件（查数据库的代码就在这一个文件里）。 -->
+  <script src="assets/db.js"></script>
+  <!-- 【接口层】页面跟云端说好的那几句话：校验入参 / 中文提示 / 契约形状 / 编排。
+       它自己不知道 SDK 长什么样，所有读写都交给上面的 db.js。 -->
   <script src="assets/cloud.js"></script>
   <!-- 所有「算」的逻辑（纯函数） -->
   <script src="assets/rules.js"></script>
