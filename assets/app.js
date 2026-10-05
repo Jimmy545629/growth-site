@@ -1509,7 +1509,20 @@
      Day 12 的做法是「没有就整块不出现」，那样用户会以为这功能没做。
 
      ⚠️ Day 13 起「显示空状态」替代了 PRD 里 AC-05b 的「整块不出现」，
-     原因就写在清单里：四种状态都得有，空也是一种要有说明的状态。 */
+     原因就写在清单里：四种状态都得有，空也是一种要有说明的状态。
+
+     ⚠️⚠️ **Day 19 收工后重改**（他提的「收藏不方便看」）—— 两处病根都在这个函数里：
+
+     ① **正文只露半句。** 原来是 `white-space: nowrap` ＋ 省略号，每条只显示一行，
+        想看全得「点一条跳过去」。他原话：「之前收藏的东西**无法直接看到**，
+        还需要点某个链接才能查到，太不方便看了。」
+        → 现在正文**全文直接铺开**（换 `blockquote`，字号从辅助档 fs-4 提到正文档 fs-3），
+          「回今日看解读」降级成**可选**动作，不再是看全文的必经之路。
+
+     ② **对不上的 id 被静默跳过。** 原来 `if (q) items.push(q);` —— 找不到就悄悄丢掉，
+        数据明明还在浏览器里，页面却显示「一条都没有」。
+        那等于**界面在说谎**，违反 Day 12 立的那条规矩（那条规矩的起因正是「按钮会说谎」）。
+        → 现在把对不上的**数出来**，如实写在条数那行。 */
   function renderMeFavorites() {
     var box = document.getElementById('me-favorites');
     if (!box) return;
@@ -1517,14 +1530,21 @@
 
     var ids = S.getFavorites();
     var items = [];
+    var missing = 0;
     ids.forEach(function (id) {
       var q = quoteById(id);
-      if (q) items.push(q);   /* 记录里留着已删掉的 id：跳过，不画出来 */
+      if (q) items.push(q);
+      else missing++;   /* 对不上的**要数出来**，不能闷掉（见上面 ②） */
     });
+
+    /* 条数那行如实说：对不上的也报出来，
+       别让「一条都没有」和「内容下架了」混成同一句话。 */
+    var countText = items.length ? items.length + ' 条' : '';
+    if (missing) countText += (countText ? ' · ' : '') + missing + ' 条对不上';
 
     add(box, h('div', { class: 'me-head' },
       h('h2', { class: 'me-title', text: D.me.favTitle }),
-      h('span', { class: 'me-count', text: items.length ? items.length + ' 条 · 点一条跳过去' : '' })));
+      h('span', { class: 'me-count', text: countText })));
 
     if (!items.length) {
       add(box, ListState('empty', {
@@ -1538,12 +1558,25 @@
 
     var row = h('ul', { class: 'favs-list' });
     items.forEach(function (q) {
-      var li = h('li', { class: 'fav-item', role: 'button', tabindex: '0',
-        title: q.text + ' —— ' + q.author });
-      add(li, h('span', { class: 'fav-text', text: q.text }));
-      add(li, h('span', { class: 'fav-from', text: '— ' + q.author }));
+      /* ⚠️ 整条**不再**是按钮了（原来是 role="button" + 点击整条跳走）。
+         现在正文本身就能读全，跳转降级成下面那个明确的链接。 */
+      var li = h('li', { class: 'fav-item' });
 
-      function go() {
+      /* 正文：**全文直接摆出来**（见上面 ①）。
+         收藏夹的意义就是「回头还能读到」，只看得见半句等于白收。 */
+      add(li, h('blockquote', { class: 'fav-text', text: q.text }));
+
+      add(li, h('p', { class: 'fav-from' },
+        h('b', { text: q.author }),
+        h('span', { class: 'fav-sep', text: '·' }),
+        h('span', { text: q.source }),
+        h('span', { class: 'fav-tag', text: q.tag })));
+
+      /* 想去「今日」看这条的完整解读（怎么理解 ＋ 今日行动）才点这里 ——
+         **可选**动作：正文上面已经读得到，不点也不缺东西。 */
+      var go = h('a', { class: 'fav-more', href: hashOf('home'), text: D.me.favGoText });
+      go.addEventListener('click', function (e) {
+        e.preventDefault();
         var at = D.quotes.indexOf(q);
         if (at < 0) return;
         /* 把语录卡切到这一条，再跳到「今日」那页去看它。
@@ -1551,11 +1584,9 @@
            先改 quoteIndex，等那边重画时正好画的就是这一条。 */
         quoteIndex = at;
         location.hash = hashOf('home');
-      }
-      li.addEventListener('click', go);
-      li.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
       });
+      add(li, go);
+
       add(row, li);
     });
     add(box, row);

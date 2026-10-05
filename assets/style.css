@@ -335,33 +335,64 @@ body {
 .favs-title { font-size: var(--fs-4); font-weight: 600; color: var(--ink-soft); }
 .favs-count { font-size: var(--fs-4); color: var(--ink-faint); }
 
+/* ⚠️ Day 19 收工后重改（他提的「收藏不方便看」）。
+   原来：flex 一行 + `white-space: nowrap` + 省略号 → 每条只露半句话，
+   想看全得点走。他的原话是「无法直接看到，还需要点某个链接才能查到」。
+   现在：每条是**一张能读的小卡** —— 正文全文摊开（用正文档 fs-3，
+   不再是 13px 的辅助档），底下作者/出处/标签一行，跳转降级成一个链接。 */
 .favs-list { list-style: none; margin: 0; padding: 0; }
 
 .fav-item {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  min-height: 32px;                      /* 可点元素下限 32×32 */
-  padding: var(--sp-3);
-  margin-bottom: var(--sp-2);
+  display: block;                        /* 从 flex 改 block：正文要能换行铺满整行 */
+  padding: var(--sp-4);
+  margin-bottom: var(--sp-3);
   border-radius: var(--radius-sm);
   border: 1px solid var(--line-soft);
   background: rgba(255, 179, 71, 0.07);
-  cursor: pointer;
 }
 .fav-item:last-child { margin-bottom: 0; }
-.fav-item:hover { border-color: rgba(255, 179, 71, 0.38); }
+.fav-item:hover { border-color: rgba(255, 179, 71, 0.28); }
 
+/* 正文：**允许换行、全文显示** —— 这次改动的核心就是这三行
+   （nowrap → normal、ellipsis → clip、去掉 overflow: hidden）。
+   blockquote 浏览器自带缩进和上下边距，这里清零。 */
 .fav-text {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--fs-4);
+  margin: 0;
+  font-size: var(--fs-3);
+  line-height: 1.75;
   color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
-.fav-from { flex: none; font-size: var(--fs-4); color: var(--warm); }
+
+/* 作者 / 出处 / 标签那一行 */
+.fav-from {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-4);
+  color: var(--ink-soft);
+}
+.fav-from b { color: var(--warm); font-weight: 600; }
+.fav-sep { margin: 0 var(--sp-1); color: var(--ink-faint); }
+.fav-tag {
+  display: inline-block;
+  margin-left: var(--sp-2);
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-4);
+  color: var(--brand);
+  background: rgba(76, 141, 255, 0.14);
+}
+
+/* 「回「今日」看这条的解读 →」：**可选**动作，正文本身已经能读全 */
+.fav-more {
+  display: inline-block;
+  margin-top: var(--sp-3);
+  font-size: var(--fs-4);
+  color: var(--warm);
+  text-decoration: none;
+}
+.fav-more:hover { text-decoration: underline; }
 
 /* 右：今日行动卡 */
 .action-card {
