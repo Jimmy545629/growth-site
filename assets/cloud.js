@@ -71,8 +71,11 @@
            由 rules.js 的 hotLimitFromHash() 校验过（1~30 的整数），
            到这里已经是可信的；但函数本身仍然不假设它一定合法 ——
            外面的东西一律不当成「长得对」。
-     出参：{ ok:true, rows:[…], date:'2026-10-03', total:库内这一天共几条 }
-           { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty' } */
+     出参：{ ok:true, rows:[…], date:'2026-10-03', updatedAt:'2026-10-06T22:50:11+08:00',
+             total:库内这一天共几条 }
+           { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty' }
+     ⚠️ updatedAt 是 Day 20 加的**新增字段**（原有字段一个没改），
+        见 docs/api-contract.md。老字段 date / total / rows 的含义都没动。 */
   function fetchHotTopics(limit) {
     var n = limit || C.hot.limit;
 
@@ -94,7 +97,29 @@
         return String(r.topic_date || '').slice(0, 10) === latest;
       });
 
-      return { ok: true, rows: rows.slice(0, n), date: latest, total: rows.length };
+      /* Day 20 加：这份快照是**什么时候抓进云端**的（那一行的 fetched_at）。
+         取这一份里**最晚**的那个时刻 —— 一行一个时间戳，理论上同一份快照
+         是同一个值，但外面来的数据不假设它长得对，按最晚的算最稳。
+
+         ⚠️ 别把它跟 date 搞混：date 说「这份数据是哪一天的」，
+         updatedAt 说「我们是什么时候把它抓进来的」。
+         某天忘了跑同步任务时，这两个数会一起往后停 —— 那正是要看出来的东西。 */
+      var updatedAt = '';
+      rows.forEach(function (r) {
+        var s = r && r.fetched_at ? String(r.fetched_at) : '';
+        if (!s) return;
+        var t = new Date(s).getTime();
+        if (isNaN(t)) return;
+        if (!updatedAt || t > new Date(updatedAt).getTime()) updatedAt = s;
+      });
+
+      return {
+        ok: true,
+        rows: rows.slice(0, n),
+        date: latest,
+        updatedAt: updatedAt,
+        total: rows.length
+      };
     }).catch(function (e) {
       return readFail('query-failed', e);
     });

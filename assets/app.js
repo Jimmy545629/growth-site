@@ -1883,6 +1883,17 @@
        真实数据的可信度，靠的就是这种「能被核对」的细节。 */
     add(head2, h('span', { class: 'hot-date', text: (T.dateLabel || '') + res.date }));
 
+    /* ★ Day 20 加：这份快照**什么时候抓进云端**的（余力加练那条）。
+       跟上面那格是一对：日期说「数据是哪一天的」，这格说「什么时候抓进来的」。
+       ⚠️ 两条都必须做到：
+       ① **时间戳认不出来就不画这一格**（formatStamp 返回空串）——
+          绝不写「未知」，那会让人以为数据坏了；
+       ② 换算只在 rules.js（纯函数），这一层只负责把字符串摆上去。 */
+    var updatedAt = R.formatStamp(res.updatedAt);
+    if (updatedAt) {
+      add(head2, h('span', { class: 'hot-updated', text: (T.updatedLabel || '') + updatedAt }));
+    }
+
     /* ⚠️ 「你指定了 N 条」这个标记必须**也**画在这里（Day 17 余力加练踩到的）。
        第一版只画在「加载中」那版卡片上，而 paintHot 一上来就 clear(box)
        把整块清掉重画 —— 结果数据一回来，标记就跟着没了。

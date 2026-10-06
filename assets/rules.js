@@ -324,6 +324,35 @@
   }
 
   /* ------------------------------------------------------------
+     四·C-2、把「某个时刻」拼成「某年某月某日 几点几分」（Day 20 加）
+
+     用途：首页「今日热点」要标出这份榜单**是什么时候抓进云端**的
+     （云端 hot_topics 那一行带的 fetched_at）。
+
+     ⚠️ 它跟上面那个 daysAgo() 是**两件事**，别混：
+       · daysAgo()     回答「多久以前」—— 今天 / 昨天 / 3 天前（内容库用）；
+       · formatStamp() 回答「具体是哪一刻」—— 2026-10-06 22:50（数据新不新用）。
+     前者要的是「感觉」，后者要的是「能核对到分钟」。
+
+     规矩跟本项目其它日期一样：**一律按本地时间拼**
+     （getFullYear / getMonth / getDate / getHours …），**禁用 toISOString()** ——
+     中国是 UTC+8，用 UTC 拼出来会整整差 8 小时。
+     格式固定 `YYYY-MM-DD HH:mm`，月 / 日 / 时 / 分都补零，上下对齐好看。
+
+     ⚠️ 认不出来（null / 空 / 乱码）一律返回**空串**，页面上那一格就不画 ——
+     既不印 undefined，也不编一个时间（跟 daysAgo 同一个规矩）。 */
+  function formatStamp(iso) {
+    var raw = (typeof iso === 'string') ? iso.replace(/^\s+|\s+$/g, '') : '';
+    if (!raw) return '';
+    var d = new Date(raw);
+    if (isNaN(d.getTime())) return '';
+
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+      ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  /* ------------------------------------------------------------
      四·D、「今日一篇」（Day 15 加）
      ------------------------------------------------------------ */
 
@@ -529,6 +558,8 @@
     pickDaily: pickDaily,
     /* Day 18 加：把云端的 created_at 算成「N 天前」（内容库读云端用） */
     daysAgo: daysAgo,
+    /* Day 20 加：把云端的时间戳拼成「YYYY-MM-DD HH:mm」（首页「最后更新」用） */
+    formatStamp: formatStamp,
     /* Day 13 加 */
     viewKey: viewKey,
     viewIdFromHash: viewIdFromHash,

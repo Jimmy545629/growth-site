@@ -1280,6 +1280,16 @@ body {
   color: var(--brand);
   font-variant-numeric: tabular-nums;
 }
+/* 「最后更新：YYYY-MM-DD HH:mm」（Day 20 加）。
+   刻意做得比「榜单日期」**淡一档**（日期用主色，这里用次色）：
+   两个都是「能不能核对」的凭据 —— 日期说的是「数据是哪一天的」，
+   这里说的是「什么时候抓进来的」。同一件事的两个侧面，
+   分主次才扫得清，不然一行里三个彩色的角标会打架。 */
+.hot-updated {
+  font-size: var(--fs-4);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
 .hot-loading {
   font-size: var(--fs-4);
   color: var(--ink-faint);

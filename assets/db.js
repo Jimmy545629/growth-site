@@ -147,12 +147,15 @@
      所以这一层把最近的整份数据都拿回来，让上层自己去挑那一天。
      （README 里那条「日期一律用本地时间拼」的坑就是这么来的。）
 
-     出参：{ ok:true, rows:[…] }（原样，不排序不截断） */
+     ⚠️ Day 20 加：`fetched_at`（这份快照抓进云端的时间）也一并取回来 ——
+     首页要如实标出「最后更新」。**取数据是这一层的事，怎么显示是上层的事。**
+
+     出参：{ ok:true, rows:[…] }（原样，只按 rank 排、不截断到页面上那几条） */
   function selectHotTopics() {
     return runQuery(function (c) {
       return c.database
         .from(C.hot.table)
-        .select('id, topic_date, rank, title, summary, hot_value, hot_text, url, source_key, source_name')
+        .select('id, topic_date, rank, title, summary, hot_value, hot_text, url, source_key, source_name, fetched_at')
         .order('rank', { ascending: true })
         .limit(400);
     });
