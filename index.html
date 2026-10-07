@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>大学生成长网站</title>
   <meta name="description" content="每天 10 分钟，把认知变成行动。精选认知语录 + 名人访谈 + 政策风口简报。">
+  <!-- Day 21：标签页上的小图标。
+       不加这一行的话，浏览器会自己去找一个叫 /favicon.ico 的文件，
+       找不到就报一条 404 —— Day 21 同伴验证时在控制台里看到的红字就是它。
+       明写这一行之后，浏览器就不去猜了，那条 404 彻底消失。
+       用 SVG（纯文本、几百字节），不引任何二进制资源，符合约束 C2 零构建。 -->
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="stylesheet" href="assets/style.css">
   <!-- Day 18：整页视频背景的样式单独一个文件，删掉这个 link 就等于关掉，
        不用在 style.css 里到处摘代码。（纯静态，没有构建步骤，符合约束 C2） -->

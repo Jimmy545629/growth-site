@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  favicon.svg —— 站点图标（Day 21 加）
+
+  为什么加：浏览器打开页面时会自动去找标签页上的小图标，
+  找不到就报一条 404（Day 21 同伴验证时 Jimmy 亲眼在控制台看到了）。
+  配上这个文件、并在 index.html 里写明一行 <link rel="icon">，
+  浏览器就不再乱猜，那条红字就彻底消失。
+
+  为什么用 SVG 而不是 .ico：
+    ① 纯文本，体积几百字节，跟「零构建」合得来（不引入任何二进制资源）；
+    ② 一个文件就能适配任意尺寸（矢量），不用准备好几档；
+    ③ Edge / Chrome / Firefox 都认。
+
+  图案：深蓝圆角底 + 一株向上的芽（两片叶 + 一根茎）。
+  跟产品名「成长」对得上，也跟站点主色（--accent #2b5cff 那一家）一致。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- 圆角方底 -->
+  <rect x="0" y="0" width="64" height="64" rx="14" fill="#1d2a56"/>
+  <!-- 内层浅色圆，让页面缩到 16px 时也认得出 -->
+  <circle cx="32" cy="32" r="21" fill="#2b5cff"/>
+  <!-- 芽：一根茎 -->
+  <path d="M32 48 L32 28" stroke="#ffffff" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+  <!-- 芽：左叶 -->
+  <path d="M32 34 C24 34 20 29 20 24 C27 24 31 27 32 33 Z" fill="#ffffff"/>
+  <!-- 芽：右叶 -->
+  <path d="M32 31 C32 25 36 21 43 21 C43 27 39 31 33 31 Z" fill="#e8eeff"/>
+</svg>
