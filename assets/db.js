@@ -270,6 +270,122 @@
     });
   }
 
+  /* ============================================================
+     三、改：把 contents 里**某一行的某几个字段**换成新值（Day 22 加）
+     ============================================================
+     入参：row —— 必须带 id（改哪一行）+ 要改的字段（改成什么）
+           例：{ id:'u-20261022-a1b2c', title:'新标题', summary:'新摘要' }
+     出参：{ ok:true, row:{…改完那一行的最新样子…} }
+           { ok:false, reason:'no-sdk'|'no-client'|'write-rejected'|'empty-result', error? }
+
+     ⚠️ 为什么「改」比「新增」更危险：
+     新增写错，最坏结果是库里**多一条**，删掉就回去了，可逆；
+     改是把**原来的值覆盖掉**，旧的标题 / 摘要一旦被冲掉，没有任何地方还留着它。
+     所以「改成功」的判据必须比新增还硬：**返回里看到那一行改完的新样子**才算数。
+
+     ⚠️ 和 insert 一样，PostgREST 被行级权限挡住时**不给 error，只给空 data**。
+     在这里就是：改了 0 行。当成成功，页面就会说「已保存」而库里纹丝不动。 */
+  function updateContent(row) {
+    return waitForSdk().then(function (WB) {
+      if (!WB) return noSdk();
+
+      var c = buildClient(WB);
+      if (!c) return noClient();
+
+      var id = row && row.id;
+      if (!id) {
+        /* 没给 id 就不知道该改哪一行。这是上层拼错了，直接挡在这里，
+           绝不发一个「没带条件的 UPDATE」出去（那会改到整张表）。 */
+        return { ok: false, reason: 'write-rejected', error: 'updateContent 缺少 id，不知道要改哪一行' };
+      }
+
+      /* 把 id 从要改的字段里摘出去 —— id 是「改哪一行」的定位条件，
+         不是要改的内容。留着它一起写回去也没坏处，但语义上不清爽。 */
+      var patch = {};
+      for (var k in row) {
+        if (k !== 'id') patch[k] = row[k];
+      }
+
+      /* ⚠️ `.select()` 同样不能省：update 后面接 select 才会返回改完的那一行。 */
+      return c.database
+        .from(C.entry.table)
+        .update(patch)
+        .eq('id', id)
+        .select()
+        .then(function (res) {
+          if (res && res.error) {
+            /* 原始错误码原样往上带，翻成中文是 cloud.js 的事（同 insertContent）。 */
+            return { ok: false, reason: 'write-rejected', error: res.error };
+          }
+
+          var got = (res && res.data) || [];
+          /* ⚠️ 空数组 = 一行也没改到。两种可能：
+             ① 行级权限不让你改（这是最可能的）；
+             ② id 对应的那一行根本不存在。
+             两种情况都不算成功，也不能假装成功。 */
+          if (!got.length) {
+            return { ok: false, reason: 'empty-result', error: '数据库没有返回改动后的那一行' };
+          }
+
+          return { ok: true, row: got[0] };
+        });
+    }).catch(function (e) {
+      return { ok: false, reason: 'write-rejected', error: String((e && e.message) || e) };
+    });
+  }
+
+  /* ============================================================
+     四、删：把 contents 里某一行去掉（Day 22 加）
+     ============================================================
+     入参：id —— 要删哪一行（没给 id 直接挡回，见下）
+     出参：{ ok:true, row:{…被删掉那一行的最后样子…} }
+           { ok:false, reason:'no-sdk'|'no-client'|'write-rejected', error? }
+
+     ⚠️ 删除和新增 / 修改有个关键不同：**它没有「改完的样子」可以看**。
+     所以判据只能换一种 —— 靠 `.select()` 把**被删掉那一行**捞回来做证据：
+     捞到了 = 确实删掉了这一条；捞不到 = 什么也没删（id 不存在，或权限不让删）。
+
+     ⚠️ 这一步很反直觉但必须说清：PostgREST 删一条**不存在的**记录，
+     返回的是「成功、删了 0 行」，不报错。
+     所以不能用「没报错」当成功判据 —— 那就是「删错了也以为删对了」的入口。
+     这里用 `.select()` 捞回被删的行，正好把「删了 0 行」和「删了 1 行」区分开。 */
+  function deleteContent(id) {
+    return waitForSdk().then(function (WB) {
+      if (!WB) return noSdk();
+
+      var c = buildClient(WB);
+      if (!c) return noClient();
+
+      if (!id) {
+        /* 没给 id 就发出去了 = 一条 DELETE 不带条件 = 删掉整张表。
+           这是这一层最不能犯的错，必须挡死。 */
+        return { ok: false, reason: 'write-rejected', error: 'deleteContent 缺少 id，不知道要删哪一行' };
+      }
+
+      return c.database
+        .from(C.entry.table)
+        .delete()
+        .eq('id', id)
+        .select()
+        .then(function (res) {
+          if (res && res.error) {
+            return { ok: false, reason: 'write-rejected', error: res.error };
+          }
+
+          var got = (res && res.data) || [];
+          /* 空数组 = 一行也没删到（id 不存在 / 权限不让删）。
+             不算成功 —— 免得页面上说「删掉了」，刷新一下那条还在。 */
+          if (!got.length) {
+            return { ok: false, reason: 'empty-result', error: '数据库没有返回被删掉的那一行' };
+          }
+
+          return { ok: true, row: got[0] };
+        });
+    }).catch(function (e) {
+      return { ok: false, reason: 'write-rejected', error: String((e && e.message) || e) };
+    });
+  }
+
   window.GROWTH_DB = {
     /* 读 */
     selectHotTopics: selectHotTopics,
@@ -277,7 +393,9 @@
     selectEntries: selectEntries,
     selectEntryByTitle: selectEntryByTitle,
     /* 写 */
-    insertContent: insertContent
+    insertContent: insertContent,
+    updateContent: updateContent,
+    deleteContent: deleteContent
   };
 
 })();

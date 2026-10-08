@@ -235,6 +235,17 @@
       entryState = 'idle';
       entryResult = null;
       entryMsg = '';
+      /* ⚠️ Day 22 补：切走时**连编辑态一起退出，草稿也清掉**。
+         这里跟「草稿留着」那条规矩是有冲突的，所以要说清为什么这样选：
+         编辑态的草稿里装的是**那一条的旧值**，留着它切回来，
+         表单会顶着「新增一条」的标题、填的却是别人的内容 ——
+         点一下提交就凭空多出一条重复的。两害相权，这里清掉更安全。
+         （普通新增态的草稿其实也一样清，因为两者共用一份 draft，
+         分不出来了 —— 干净比「省一次重填」重要。） */
+      if (entryEditTarget) {
+        entryEditTarget = null;
+        entryDraft = { title: '', sourceId: '', summary: '', media: entryDraft.media };
+      }
     }
 
     /* 地址提醒（Day 19 补 2）也跟着重画一遍：
@@ -1060,6 +1071,13 @@
     var col = String(src.column_key || '');
 
     var it = {
+      /* ⚠️ id 是 Day 22 补的，也是今天最要紧的一个字段：
+         「改一条 / 删一条」都得先知道**动的是哪一条**。
+         之前这里没带 id，因为画列表用不上它 —— 现在要用了，就必须补上。
+         它来自库里的主键，是**唯一能定位一行**的东西。 */
+      id: r && r.id,
+      sourceId: r && r.source_id,
+      summary: (r && r.summary) || '',
       title: r && r.title,
       tag: (r && r.tag) || '',
       tagColor: d.tagColor || (C.entry.tagColor && C.entry.tagColor[col]) || 'blue',
@@ -1297,8 +1315,107 @@
       }
     }
 
+    /* ---------- 操作区（Day 22 加）：改一条 / 删一条 ----------
+       ⚠️ 只给**真的从云端读回来的、有 id 的**条目画这两个按钮。
+       本地写死在 data.js 里的那些（十二三条）没有 id ——
+       它们不在云端、也不该被页面动，画个按钮点下去必然失败，
+       不如干脆不画（「不许留空壳」的老规矩）。 */
+    if (it.id) {
+      var ops = h('div', { class: 'entry-ops' });
+
+      var edit = h('button', {
+        class: 'entry-op', type: 'button',
+        'aria-label': '编辑「' + it.title + '」',
+        title: '改这一条',
+        text: D.libraryEdit.opEdit
+      });
+      edit.addEventListener('click', function () { openEditForm(it); });
+
+      var del = h('button', {
+        class: 'entry-op is-danger', type: 'button',
+        'aria-label': '删除「' + it.title + '」',
+        title: '删这一条',
+        text: D.libraryEdit.opDelete
+      });
+      del.addEventListener('click', function () { askDeleteEntry(it); });
+
+      add(ops, edit);
+      add(ops, del);
+      add(li, ops);
+    }
+
     add(li, body);
     return li;
+  }
+
+  /* ---------- 「改一条」：把上面的新增表单**借过来**当编辑框（Day 22 加） ----------
+     ⚠️ 设计决定：**不新做一个表单**，而是复用「新增一条」那一块。
+     理由：编辑和新增要填的东西**完全一样**（标题 / 来源 / 摘要 / 形态），
+     另做一个表单，就得维护两份一模一样的字段、两份校验提示，
+     迟早出现「新增时不让超长、编辑时让超长」这种不一致。
+     做法是让那块表单进入「编辑模式」：字段填上旧值、按钮变成「保存修改」、
+     旁边多一个「取消」退回新增模式。 */
+  function openEditForm(it) {
+    /* 把要改的那条记下来 —— 提交时用它拿 id。 */
+    entryEditTarget = { id: it.id, title: it.title };
+
+    /* 旧值填回表单。⚠️ 用 **it 里读回来的原值**，不是界面上那串文字 ——
+       界面上的文字可能被截断过（比如「…」），拿它回填就会把截断存回去。 */
+    entryDraft.title = it.title || '';
+    entryDraft.sourceId = it.sourceId || '';
+    entryDraft.summary = it.summary || '';
+    entryDraft.media = it.media || '';
+
+    /* 切走编辑态：清掉上一次的提交结果，免得旧的「已新增」还挂在那儿。 */
+    entryState = 'idle';
+    entryResult = null;
+    entryMsg = '';
+
+    /* 表单在页面靠下的位置，改完要让人**看得见**它，所以滚过去。
+       这是「点了按钮却看不出发生了什么」的老毛病。 */
+    renderLibraryAdd();
+    var box = document.getElementById('library-add');
+    if (box && box.scrollIntoView) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  /* ---------- 「删一条」：先问，再删，再回查（Day 22 加） ----------
+     ⚠️ AGENTS 第 4 条第 11 项：凡是删除入口，**必须先问**，
+     而且问的时候要说清「会丢什么、能不能撤销」。
+     这一段就是那条规矩在内容库上的落实（之前只有行动项删除那一个入口）。 */
+  function askDeleteEntry(it) {
+    var lines = [
+      '这一条会从云端内容库里**真的删掉**；',
+      '刷新页面之后，它不会再出现在「' + (it.origin || '内容库') + '」那一栏里；',
+      D.libraryEdit.delCannotUndo
+    ];
+
+    if (!confirmDanger('「' + it.title + '」 —— ' + D.libraryEdit.delTitle, lines)) return;
+
+    /* 记住滚动位置：删完列表会整个重画，不留神会跳回顶上，
+       人就以为「怎么全变了」。 */
+    var y = (typeof window !== 'undefined' && window.scrollY) || 0;
+
+    entryState = 'busy';
+    entryResult = null;
+    entryMsg = D.libraryEdit.deleting;
+    renderLibraryAdd();
+    renderLibrary();
+
+    G.deleteEntry(it.id).then(function (res) {
+      entryState = res.ok ? 'ok' : 'fail';
+      entryResult = res;
+      entryMsg = '';
+      renderLibraryAdd();
+
+      /* ⚠️ 删成功之后必须**重新从云端读一遍**再画。
+         不能在本地数组里把那一条抹掉就完事 ——
+         那样画出来的「消失」只是**本地**的消失，
+         库里到底删没删掉，根本没验证过。
+         重新读一遍，看到它真的不在返回里，才算数（这就是今天那条核心判据）。 */
+      loadLibrary().then(function () {
+        if (y && window.scrollTo) window.scrollTo(0, y);
+      });
+    });
   }
 
   /* ============================================================
@@ -1310,7 +1427,9 @@
      契约全文见 docs/api-contract.md。
 
      ⚠️ 三条自我约束（写清楚，免得以后越做越大）：
-     1. **只做新增** —— 没有编辑、没有删除（那是第 4 周的事）。
+     1. **只动内容库这一张表**。Day 18 时这里只有「新增」；
+        Day 22 加了「改 / 删」，但**做的是同一张表上的同一批字段** ——
+        没有新的写入口、没有新的表。批量操作、用户系统仍不做。
      2. **不跟上面的榜单联动** —— 榜单读的是本地 data.js，这里提交的进云端表。
         所以提交完必须**当场把返回显示出来**，否则会让人以为「点了没反应」。
      3. **要联网**。连不上时这一块如实说，页面其它部分照常能用（约束 C1）。
@@ -1325,6 +1444,11 @@
   var entryMsg = '';              /* 本地拦下来时的那句中文 */
   var entrySources = null;        /* sources 列表：null = 还没读；[] = 读了但是空或失败 */
   var entrySourcesNote = '';
+
+  /* 【Day 22 加】这块表单现在是「两用」的：平时是新增，点某条的「改」就变成编辑。
+     null = 新增模式；有值 = 编辑模式，里面记着要改哪一条。
+     ⚠️ 只记 id 和旧标题就够：旧标题只用来在确认框里说清「改的是哪条」。 */
+  var entryEditTarget = null;
 
   /* 读来源列表。
      ⚠️ 来源**必须从云端现读**，不能在本地写死一份：这一列的 id 是外键，
@@ -1354,7 +1478,12 @@
   }
 
   /* 提交。值从 DOM 现读一遍，不依赖「上次 input 事件更新过」——
-     粘贴、自动填充这些方式不一定触发 input 事件。 */
+     粘贴、自动填充这些方式不一定触发 input 事件。
+
+     【Day 22 改】这个函数现在同时承担「新增」和「保存修改」两件事。
+     分流的依据只有一个：entryEditTarget 是不是 null。
+     ⚠️ 这么做是为了**不出现两份长得一样的提交逻辑** ——
+     份数一多，「新增时校验这个、改的时候忘了校验那个」是迟早的事。 */
   function submitEntry() {
     var t = document.getElementById('add-title');
     var s = document.getElementById('add-source');
@@ -1370,14 +1499,27 @@
     entryState = 'busy';
     renderLibraryAdd();
 
+    var editing = entryEditTarget;
+
     /* 校验和写入都交给 cloud.js —— 页面这一层**不重复实现规则**，
-       否则「页面说可以、库里不认」这种不一致迟早出现。 */
-    G.postEntry({
+       否则「页面说可以、库里不认」这种不一致迟早出现。
+       ⚠️ 编辑时多带一个 id：其余四个字段一模一样，
+       只是告诉接口层「改这一条」而不是「新加一条」。 */
+    var payload = {
       title: entryDraft.title,
       sourceId: entryDraft.sourceId,
       summary: entryDraft.summary,
       media: entryDraft.media
-    }).then(function (res) {
+    };
+    var call;
+    if (editing) {
+      payload.id = editing.id;
+      call = G.patchEntry(payload);
+    } else {
+      call = G.postEntry(payload);
+    }
+
+    call.then(function (res) {
       var box = document.getElementById('library-add');
       if (!box || !box.isConnected) return;
 
@@ -1385,9 +1527,22 @@
       if (res.ok) {
         entryState = 'ok';
         entryMsg = '';
-        /* 成功就把文字清掉 —— 留着上一份会让人以为「还没提交」。
-           形态留着：连着加几条时，多半是同一种形态。 */
-        entryDraft = { title: '', sourceId: '', summary: '', media: entryDraft.media };
+        if (editing) {
+          /* 改完了：退回新增模式，并把表单清空。
+             ⚠️ 必须退出编辑态 —— 不退的话，下一次点「提交」会**再去改同一条**，
+             人以为自己加了一条新的，其实又把上一条覆盖了一遍。 */
+          entryEditTarget = null;
+          entryDraft = { title: '', sourceId: '', summary: '', media: entryDraft.media };
+          /* 改完要让列表跟着变 —— 重新从云端读一遍再画。
+             不能只在本地改一下数字，那没验证过库里到底成没成。 */
+          loadLibrary();
+        } else {
+          /* 成功就把文字清掉 —— 留着上一份会让人以为「还没提交」。
+             形态留着：连着加几条时，多半是同一种形态。 */
+          entryDraft = { title: '', sourceId: '', summary: '', media: entryDraft.media };
+          /* 新增成功也让列表刷新，这样新加的那条当场出现在栏里。 */
+          loadLibrary();
+        }
       } else {
         entryState = 'fail';
         /* 中文提示直接用 cloud.js 给的那一句，这里**不再写第二句**。 */
@@ -1395,6 +1550,17 @@
       }
       renderLibraryAdd();
     });
+  }
+
+  /* 【Day 22 加】从编辑态退回新增态。
+     对应编辑框旁边那个「取消」。 */
+  function cancelEditEntry() {
+    entryEditTarget = null;
+    entryDraft = { title: '', sourceId: '', summary: '', media: entryDraft.media };
+    entryState = 'idle';
+    entryResult = null;
+    entryMsg = '';
+    renderLibraryAdd();
   }
 
   /* 把返回原样显示出来。
@@ -1422,12 +1588,25 @@
     var box = document.getElementById('library-add');
     if (!box) return;
     var T = D.libraryAdd;
+    var E = D.libraryEdit;
     clear(box);
 
-    var wrap = h('section', { class: 'add-entry' });
+    /* 【Day 22】这块表单两用，所以头部文案也跟着切：
+       编辑态说「修改这一条」，新增态说原来那句「新增一条」。 */
+    var editing = !!entryEditTarget;
+
+    var wrap = h('section', { class: 'add-entry' + (editing ? ' is-editing' : '') });
     add(wrap, h('div', { class: 'add-entry-head' },
-      h('h3', { class: 'add-entry-title', text: T.head }),
-      h('p', { class: 'add-entry-desc', text: T.desc })));
+      h('h3', { class: 'add-entry-title', text: editing ? E.head : T.head }),
+      h('p', { class: 'add-entry-desc', text: editing ? E.desc : T.desc })));
+
+    /* 编辑态多一条「正在改哪一条」的横幅 ——
+       ⚠️ 这个不能省：不写清在改哪条，人填着填着会忘了自己在编辑，
+       以为是在新增，改完一看「怎么没多出来一条」。 */
+    if (editing) {
+      add(wrap, h('p', { class: 'add-editing-note', role: 'status',
+        text: E.editingNote + entryEditTarget.title }));
+    }
 
     var form = h('form', { class: 'add-entry-form', novalidate: 'novalidate' });
 
@@ -1532,16 +1711,32 @@
     add(form, h('div', { class: 'add-field' },
       h('span', { class: 'add-label', text: T.mediaLabel }), mrow));
 
-    /* ---- 提交 ---- */
+    /* ---- 提交（编辑态时按钮文字和动作都不一样） ---- */
+    var submitText = entryState === 'busy'
+      ? (editing ? E.saving : T.submitting)
+      : (editing ? E.save : T.submit);
     var submit = h('button', {
       class: 'btn btn-primary add-submit', type: 'submit',
-      text: entryState === 'busy' ? T.submitting : T.submit
+      text: submitText
     });
     if (entryState === 'busy' || !entrySources || !entrySources.length) {
       submit.setAttribute('disabled', '');
     }
-    add(form, h('div', { class: 'add-actions' }, submit,
-      h('p', { class: 'add-req-note', text: T.reqNote })));
+
+    if (editing) {
+      /* 「取消」是普通按钮，不是 submit —— 它是「不提交」的意思。
+         ⚠️ 必须写 type='button'：form 里的按钮默认就是 submit，
+         不写的话点「取消」反而会把表单提交出去。 */
+      var cancel = h('button', {
+        class: 'btn add-cancel', type: 'button', text: E.cancel
+      });
+      cancel.addEventListener('click', function () { cancelEditEntry(); });
+      add(form, h('div', { class: 'add-actions' }, submit, cancel,
+        h('p', { class: 'add-req-note', text: E.reqNote })));
+    } else {
+      add(form, h('div', { class: 'add-actions' }, submit,
+        h('p', { class: 'add-req-note', text: T.reqNote })));
+    }
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();

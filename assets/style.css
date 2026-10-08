@@ -805,7 +805,10 @@ body {
 .entry:nth-child(1) .entry-no { background: #f87171; }
 .entry:nth-child(2) .entry-no { background: #ffb347; color: #3a2400; }
 
-.entry-body { min-width: 0; }
+/* ⚠️ Day 22：加了「改 / 删」两个按钮之后，`.entry` 里就变成三个格子
+   （序号 / 正文 / 操作）。给正文加 flex:1 让它占满剩下的宽度，
+   操作区才会被挤到最右边 —— 否则长标题会把按钮顶出去。 */
+.entry-body { min-width: 0; flex: 1; }
 .entry-title {
   margin: 0 0 var(--sp-1);
   font-size: var(--fs-3);
@@ -859,6 +862,39 @@ body {
   color: var(--ink-soft);
 }
 .entry-steps li { margin-bottom: 2px; }
+
+/* ---------- 每一条内容后面的「改 / 删」按钮（Day 22 加） ----------
+   ⚠️ 做成两个小按钮而不是一个「…」菜单，是**故意的**：
+   菜单会把「删除」藏起来，得多点一下才看得见后果；
+   两个按钮都在明面上，点「删」之前那一次确认框才会真的起到拦一下的作用。
+   ⚠️ 平时半透明、鼠标移到这一条上面才变清楚 ——
+   不然每一行都挂两个按钮，列表看起来会很吵。 */
+.entry-ops {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  opacity: 0.35;
+  transition: opacity 0.15s;
+}
+.entry:hover .entry-ops,
+.entry:focus-within .entry-ops { opacity: 1; }
+/* 触屏没有 hover，干脆一直显示出来，别让人找不到 */
+@media (hover: none) { .entry-ops { opacity: 1; } }
+
+.entry-op {
+  min-height: 26px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--fs-4);
+  cursor: pointer;
+}
+.entry-op:hover { color: var(--ink); border-color: var(--brand); }
+.entry-op.is-danger:hover { color: #fff; background: #f87171; border-color: #f87171; }
 
 /* ---------- 底部 ---------- */
 .foot {
@@ -1109,6 +1145,31 @@ body {
 .add-submit { min-width: 96px; }
 .add-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 .add-submit:disabled:hover { background: var(--card-2); }   /* 禁用时别再有 hover 效果 */
+
+/* ---------- 编辑态（Day 22 加） ----------
+   ⚠️ 编辑态那块表单要**一眼看出来跟平时不一样**：
+   不然人填着填着会忘了自己是在「改一条」而不是「加一条」，
+   改完发现列表里没多出来，就会以为是坏的。 */
+.add-entry.is-editing {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(76, 141, 255, 0.12);
+}
+.add-editing-note {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: rgba(76, 141, 255, 0.12);
+  color: var(--brand);
+  font-size: var(--fs-4);
+  font-weight: 600;
+}
+.add-cancel {
+  min-width: 72px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+}
+.add-cancel:hover { color: var(--ink); border-color: var(--ink-faint); }
 .add-req-note { margin: 0; font-size: var(--fs-4); color: var(--ink-faint); }
 
 /* 结果区：把接口返回的 JSON **原样**摊出来。

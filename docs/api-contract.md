@@ -20,6 +20,12 @@
 | **02** | POST | `GROWTH_CLOUD.postEntry(input)` | **新增一条内容**，写进云端 `contents` 表 | `assets/cloud.js` | **Day 18** |
 | **03** | GET | `GROWTH_CLOUD.fetchEntries()` | **读内容库三列的条目**（`contents` 表 `kind='entry'` ＋ 关联 `sources`） | `assets/cloud.js` | **Day 18** |
 | **04** | GET | `GROWTH_CLOUD.fetchSources()` | 读来源名单（「新增一条」下拉的选项） | `assets/cloud.js` | **Day 18** |
+| **05** | PATCH | `GROWTH_CLOUD.patchEntry(input)` | **改一条内容**（按 `id` 覆盖标题 / 来源 / 摘要 / 形态） | `assets/cloud.js` | **Day 22** |
+| **06** | DELETE | `GROWTH_CLOUD.deleteEntry(id)` | **删一条内容**（真删，删完回查证明它真的没了） | `assets/cloud.js` | **Day 22** |
+
+⚠️ **Day 22 起，四类操作闭环了**：读（01 / 03 / 04）、增（02）、改（05）、删（06）。
+这也意味着 `anon` 这个匿名身份在 `contents` 表上有了**四样权限**
+（SELECT / INSERT / UPDATE / DELETE）—— 见 `db/schema.sql` 的 Day 22 段和下面的「二·五」。
 
 ⚠️ **「建在哪」这一列 Day 19 之后要看仔细**：四条接口**对外的名字没变、一个字段也没变**，
 但它们**底下那层**换了文件 —— 见下面这张图。
@@ -316,14 +322,112 @@ Day 18 之前，内容库读的是**本地 `data.js`**（写死的示例内容�
 
 | 没做的 | 为什么 |
 | --- | --- |
-| **PATCH（改一条）** | 按 Day 18 清单，属于**第 4 周** |
-| **DELETE（删一条）** | 同上 |
-| **批量写入** | 按 Day 18 清单，**今天不做**。接口一次只收一条 |
-| **登录 / 权限** | PRD 第 2 条明确「不做登录 / 注册 / 账号」 |
+| **批量写入 / 批量删除** | 按 Day 22 清单，**今天不做**。接口一次只收一条 |
+| **登录 / 权限（按人分权）** | PRD 第 2 条明确「不做登录 / 注册 / 账号」 |
+| **软删除（删了还能找回）** | Day 22 的**余力加练**，今天先做真删；要不要加软删除待定 |
 
-⚠️ **代价要说清**：因为不做登录，这个接口**任何人打开网页都能调**。
-所以数据库那一侧把权限**限死成只能「新增」** —— 不能改、不能删。
-这是「最小开放面」：宁可只开一条窄缝，不开一扇门。
+⚠️ **代价要说清**（这段在 Day 22 更新过）：因为不做登录，这几个写接口
+**任何人打开网页都能调** —— 现在能读、能增、能改、也能删。
+
+Day 18 时这里做的是「最小开放面」：只开一条窄缝（只能新增）。
+Day 22 开了 UPDATE / DELETE 之后，**开放面变宽了**，代价必须写在明处：
+
+| 打开的 | 代价 | 兜底（在哪儿拦） |
+| --- | --- | --- |
+| INSERT | 谁都能往库里加内容 | 唯一约束（同来源下标题不许重复）+ 只能写 `kind='entry'` |
+| UPDATE | 谁都能改已有的内容 | 策略里 `WITH CHECK` 锁死「身份字段不许动」（`kind` / `created_via`），且改完仍要满足长度 / 形态 |
+| DELETE | **谁都能删已有的内容** | 策略里 `USING (kind='entry')` —— 只能删内容库这一类，删不了「今日一篇」 |
+
+⚠️ **这三扇门都挡不住「同一个人把别人加的内容删掉」** ——
+因为根本没有「谁」这个概念（不做登录）。这是**明知的取舍**，不是没想到。
+真要挡住，唯一的办法是加登录和按人分权，那就超出 PRD 第 2 条了。
+
+---
+
+## 二·五、PATCH（Day 22 建立）
+
+**函数**：`GROWTH_CLOUD.patchEntry(input)`
+
+**入参**：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `id` | ✅ | **改哪一条**。库里的主键，由「读三列条目」（03）带回来 |
+| `title` | ✅ | 新标题，1–60 字（trim 后） |
+| `sourceId` | ✅ | 新来源，必须是 `sources` 里真实存在的 id |
+| `summary` | 选填 | 新摘要，最多 200 字 |
+| `media` | 选填 | 不填落默认；填了必须是 `video/article/podcast/talk` |
+
+**出参**：
+
+```jsonc
+// 成功：字段全部取**改完之后库里的值**，不是我们发过去的副本
+{ "ok": true, "id": "u-20261022-a1b2c", "title": "改后的标题", "source_id": "…",
+  "kind": "entry", "media": "article", "created_at": "…", "row": { /* 整行 */ } }
+
+// 失败
+{ "ok": false, "code": "PATCH_FAILED", "message": "没改成功，稍后再试一次", "detail": { /* 数据库原始报错 */ } }
+```
+
+**新增的错误码**：
+
+| code | 中文提示 | 什么时候 |
+| --- | --- | --- |
+| `MISSING_ID` | 不知道要动哪一条（缺少 id） | 没给 `id` —— **本地就拦下，不发请求** |
+| `PATCH_FAILED` | 没改成功，稍后再试一次 | 其余一切改不动的理由 |
+
+（标题 / 来源 / 摘要 / 形态填得不对时，用的是 02 那套老错误码，一个字没变。）
+
+⚠️ **跟 02（POST）一处关键不同：PATCH 不做「先查重」那一步。**
+原因：POST 是「凭空多一条」，重名必须提前拦；
+PATCH 改的是**我自己这一条** —— 万一用户只改摘要、标题一个字没动，
+再查一次重就会把「我自己」查出来，把一次正常修改误判成重复。
+所以这里重名只靠数据库的唯一约束兜底（撞了回 23505 → 翻成 `DUPLICATE`）。
+
+⚠️ **只允许改四样内容字段**（标题 / 来源 / 摘要 / 形态）。
+`id` 是定位条件不算内容；`kind` / `created_via` / `created_at` 是这一行的「身份」，
+**一个字都不许动** —— 改 `kind` 会把内容改成另一类数据，改 `created_via` 等于冒充别人写的。
+数据库策略里 `WITH CHECK` 把这两样锁死了。
+
+---
+
+## 二·六、DELETE（Day 22 建立）
+
+**函数**：`GROWTH_CLOUD.deleteEntry(id)`
+
+**入参**：`id`（要删哪一条）。**没给 id 本地就拦下**，绝不发一条不带条件的删除。
+
+**出参**：
+
+```jsonc
+{ "ok": true, "id": "u-20261022-a1b2c", "removed": true }
+{ "ok": false, "code": "DELETE_FAILED", "message": "没删掉，稍后再试一次", "detail": "…" }
+```
+
+**新增的错误码**：
+
+| code | 中文提示 | 什么时候 |
+| --- | --- | --- |
+| `MISSING_ID` | 不知道要动哪一条（缺少 id） | 没给 id |
+| `DELETE_FAILED` | 没删掉，稍后再试一次 | 其余一切删不动的理由（含「说删了但回查还在」） |
+
+### ⚠️⚠️ 这条接口最要紧的设计：删完**必须回查**
+
+`deleteEntry` 不是「发个删除请求，没报错就算成功」。它是：
+
+```
+① 发删除（带 .select()，把被删掉的那一行捞回来当证据）
+② 再读一遍整张内容表（selectEntries）
+③ 在返回里找那个 id —— 还在 = 没删掉，报失败；不在了 = 真删掉了
+```
+
+**为什么要多这一步**：删除跟新增有个致命的不同 ——
+PostgREST 删一条**本来就不存在的**记录，返回的是「成功、删了 0 行」，**不报错**。
+所以「没报错」根本不能当成功判据 —— 那就成了「删错了也以为删对了」的入口。
+只有「回查之后它确实不在返回里」才算数。**这条判据是今天整个 DELETE 的地基。**
+
+（服务端那一侧还有一道：`deleteContent()` 也接了 `.select()`，
+捞不到被删的行就回 `empty-result` —— 两道一起，把「删了 0 行」和「删了 1 行」分开。）
 
 ---
 
@@ -333,20 +437,26 @@ Day 18 之前，内容库读的是**本地 `data.js`**（写死的示例内容�
 | --- | --- |
 | 入参校验 + 中文提示 | `assets/cloud.js` → `validateEntry()`、`CODE_TEXT` |
 | 编排：先校验 → 再查重 → 再写入 → 再读回 | `assets/cloud.js` → `postEntry()` |
-| 数据库原始错误码 → 契约错误码（23505→`DUPLICATE` 等） | `assets/cloud.js` → `entryWriteFail()` |
+| 数据库原始错误码 → 契约错误码（23505→`DUPLICATE` 等） | `assets/cloud.js` → `entryWriteFail()` / `entryPatchFail()` / `entryDeleteFail()` |
 | 生成主键（`u-YYYY-MM-DD-xxx`） | `assets/cloud.js` → `makeEntryId()` |
 | **读三列条目（含关联来源）** | `assets/cloud.js` → `fetchEntries()` ← 调 `db.js` 的 `selectEntries()` |
 | 来源下拉的数据 | `assets/cloud.js` → `fetchSources()` ← 调 `db.js` 的 `selectSources()` |
 | 读当日热搜 | `assets/cloud.js` → `fetchHotTopics()` ← 调 `db.js` 的 `selectHotTopics()` |
-| **「查数据库」这件事本身**：等 SDK / 建连接 / 表名 / 列名 / 排序 / 条数 / `.insert()` | **`assets/db.js`** → `selectHotTopics()` / `selectEntries()` / `selectSources()` / `selectEntryByTitle()` / `insertContent()` |
-| **写失败时把「空数组」当成没写成**（契约 2.6 ②） | **`assets/db.js` → `insertContent()` 返回 `empty-result`**，再由 `cloud.js` 翻成 `WRITE_FAILED` |
+| **改一条的编排（校验 → 覆盖 → 取库里的新值）** | `assets/cloud.js` → `patchEntry()` ← 调 `db.js` 的 `updateContent()` |
+| **删一条 + 回查证明真的没了** | `assets/cloud.js` → `deleteEntry()` ← 调 `db.js` 的 `deleteContent()` ＋ 回查 `selectEntries()` |
+| **「查数据库」这件事本身**：等 SDK / 建连接 / 表名 / 列名 / 排序 / 条数 / `.insert()` / `.update()` / `.delete()` | **`assets/db.js`** → `selectHotTopics()` / `selectEntries()` / `selectSources()` / `selectEntryByTitle()` / `insertContent()` / `updateContent()` / `deleteContent()` |
+| **写失败时把「空数组」当成没写成**（契约 2.6 ②） | **`assets/db.js`** → `insertContent()` / `updateContent()` / `deleteContent()` 返回 `empty-result`，再由 `cloud.js` 翻成 `WRITE_FAILED` / `PATCH_FAILED` / `DELETE_FAILED` |
 | **读失败时的中文说法** | `assets/data.js` → `libraryFail`；`assets/app.js` → `failHint()` |
-| **分组 + 云端字段还原** | `assets/app.js` → `buildColumns()`、`entryFromRow()` |
+| **分组 + 云端字段还原** | `assets/app.js` → `buildColumns()`、`entryFromRow()`（**Day 22 补了 `id` / `sourceId` / `summary`**） |
 | **「N 天前」的时间换算** | `assets/rules.js` → `daysAgo()` |
 | 长度上限等常量 | `assets/config.js` → `entry` 段 |
 | 表单与结果展示 | `assets/app.js` → `renderLibraryAdd()`、`submitEntry()`、`renderEntryResult()` |
+| **每条的「改 / 删」按钮 ＋ 编辑态切换** | `assets/app.js` → `renderEntry()`（画按钮）、`openEditForm()`、`askDeleteEntry()`、`cancelEditEntry()` |
+| **改 / 删的确认话与按钮文案** | `assets/data.js` → `libraryEdit` |
+| **删除前的确认框** | `assets/app.js` → `confirmDanger()`（AGENTS 第 4 条第 11 项要求的统一封装） |
 | 数据库那一层（GRANT / INSERT 策略 / 唯一约束 / 留痕列 / `detail` 列） | `db/schema.sql` 的 **Day 18 段** + 云端实际执行的 SQL |
-| 服务端留痕（`created_via`） | `db/schema.sql` 的 Day 18 段 ③④ 两条 |
+| **数据库那一层（UPDATE / DELETE 的 GRANT 与策略）** | `db/schema.sql` 的 **Day 22 段** + 云端实际执行的 SQL |
+| 服务端留痕（`created_via`） | `db/schema.sql` 的 Day 18 段 ③④ 两条；Day 22 段在 UPDATE 策略里锁死了「不许改它」 |
 
 ⚠️ **上表为什么分得这么细**：一份契约要能查到「这句话由哪几行代码实现」，
 坏了才知道去哪儿修。Day 19 之后，**跟数据库打交道的那几行全在 `db.js` 一个文件里**。

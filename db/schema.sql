@@ -136,8 +136,8 @@ CREATE POLICY contents_read_all ON contents FOR SELECT TO authenticated, anon US
 -- 它要让匿名网页能往这张表里写。这是全项目**第一次**让网页有写权限。
 --
 -- 为什么只开 INSERT：能写已经是有代价的（没登录，谁都能写），
--- 那就把门开到**刚好够用**为止 —— 能加不能改、也不能删。
--- 「谁能改、谁能删」那两扇门照旧关着（第 4 周做 PATCH / DELETE 时再单独议）。
+-- 那就把门开到**刚好够用**为止。Day 18 时是「能加不能改、也不能删」；
+-- 「谁能改、谁能删」那两扇门**已在 Day 22 单独开出来**（见本文件末尾的 Day 22 段）。
 --
 -- ⚠️ 这里每一条都要能**重复跑**（这个文件本来就是「空库上能原样重跑」的），
 -- 所以 ALTER 那两条写成「先 DROP IF EXISTS 再 ADD」，而不是直接 ADD。
@@ -216,9 +216,79 @@ WHERE c.id = v.id;
 --     → contents_read_all(SELECT) / contents_insert_guard(INSERT)
 --   SELECT grantee, privilege_type FROM information_schema.role_table_grants
 --     WHERE table_name = 'contents' AND grantee IN ('anon','authenticated');
---     → anon 只有 INSERT / SELECT（**没有** UPDATE/DELETE）
+--     → Day 18 跑完时 anon 只有 INSERT / SELECT（Day 22 段会给它补上 UPDATE / DELETE）
 --   SELECT column_name, column_default FROM information_schema.columns
 --     WHERE table_name = 'contents' AND column_name = 'created_via';
 --     → 默认值 = current_user
 --   SELECT count(*) FILTER (WHERE detail IS NOT NULL) FROM contents WHERE kind = 'entry';
 --     → 12（本地那 12 条的富字段已经搬进云端；从页面表单加的那条没有 detail，是正常的）
+
+
+-- ============================================================
+-- 【Day 22 加】给 contents 补上「允许改」和「允许删」两扇门
+-- ============================================================
+--
+-- 为什么今天才开：Day 18 只开了 INSERT（能加不能改、不能删），
+-- 那是有意的「最小开放面」。第 4 周做 PATCH / DELETE，所以现在要把这两扇门打开 ——
+-- 但**只开到够用为止**，不是「整张表随便改」。
+--
+-- ⚠️ 先说清这一节最关键的一处不同（这个很容易写错）：
+--    INSERT 策略只要一个 WITH CHECK（「写进来的东西必须长这样」）；
+--    但 UPDATE 策略要**两半**：
+--      USING      —— 哪几行你**有权动**（进门前筛）
+--      WITH CHECK —— 改完**必须仍然长这样**（出门前再筛）
+--    只写一半都等于开了个洞：
+--      只给 USING    → 你能把任意一行改成任意样子（包括把 kind 改成 read）；
+--      只给 WITH CHECK → 等于整张表每一行都能改（门槛没了）。
+--    DELETE 只要 USING 一半 —— 删除没有「改完的样子」，没有可验的东西。
+--
+-- ⚠️ 这一节同样要能**重复跑**，所以一律「先 DROP IF EXISTS 再 CREATE」。
+--
+-- ⚠️ 顺序提醒：这一节必须在**表已经存在**之后跑（本文件是从头到尾一条条下来的，
+--    所以放最后没问题）。
+
+-- ① 门一：表级权限。anon 原来只有 SELECT / INSERT，这里补上 UPDATE 和 DELETE。
+--    ⚠️ 两个必须都 GRANT —— 少一个就得到形似「策略失效」的 42501，
+--    而且 PostgREST 被挡住时**可能只给空 data 不给 error**，最难查。
+GRANT UPDATE ON TABLE public.contents TO anon;
+GRANT DELETE ON TABLE public.contents TO anon;
+
+-- ② 门二：允许改（UPDATE）的行级策略。注意 USING + WITH CHECK 两半都在。
+DROP POLICY IF EXISTS contents_update_guard ON contents;
+CREATE POLICY contents_update_guard ON contents FOR UPDATE TO anon, authenticated
+  -- USING：只允许动「内容库三列」这一类（kind='entry'）。
+  --        「今日一篇」（kind='read'）不走页面这条通道，一个字都不许从这儿改。
+  USING (kind = 'entry')
+  -- WITH CHECK：改完之后，这一行必须仍然是「一条合法的内容库条目」——
+  --   ① 身份不许换：kind 还是 entry；created_via 还是数据库自己填的那个值
+  --      （否则「改一下这条」就能变成「冒充别人写的」）。
+  --   ② 内容必须合法：跟 INSERT 策略同一套标准（长度 / 形态）。
+  WITH CHECK (
+    kind = 'entry'
+    AND source_id IS NOT NULL
+    AND char_length(btrim(title)) BETWEEN 1 AND 60
+    AND char_length(COALESCE(summary, '')) <= 200
+    AND media IN ('video', 'article', 'podcast', 'talk')
+    AND created_via = current_user
+  );
+
+-- ③ 门二：允许删（DELETE）的行级策略。只有 USING 一半。
+DROP POLICY IF EXISTS contents_delete_guard ON contents;
+CREATE POLICY contents_delete_guard ON contents FOR DELETE TO anon, authenticated
+  -- USING：只允许删「内容库三列」这一类。
+  --        ⚠️ 这一条很要紧 ——「今日一篇」那类数据要是也能从页面删，
+  --        就成了「顺手删掉首页内容」，那不是一个删除入口该有的权力。
+  USING (kind = 'entry');
+
+-- 校验改动有没有生效（这几条都应该有结果）：
+--   SELECT name, cmd FROM pg_policies WHERE tablename = 'contents' ORDER BY cmd;
+--     → contents_delete_guard(DELETE) / contents_insert_guard(INSERT)
+--       / contents_read_all(SELECT) / contents_update_guard(UPDATE)
+--   SELECT grantee, privilege_type FROM information_schema.role_table_grants
+--     WHERE table_name = 'contents' AND grantee = 'anon' ORDER BY privilege_type;
+--     → anon 现在有 DELETE / INSERT / SELECT / UPDATE 四样
+--
+-- ⚠️ 开完门之后，务必**在页面上真的改一条、删一条试试**（AGENTS 第 3 条：
+--    改完必须证明能用，不许只看 SQL 跑通了就当成了）。
+--    如果 GRANT 漏了或策略名字写错了，第 ①②③ 步都不会报错，
+--    但页面上会得到「没改成功」—— 那时候回头看这几条。

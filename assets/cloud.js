@@ -190,7 +190,10 @@
     SUMMARY_TOO_LONG: '摘要太长了，最多 ' + C.entry.summaryMax + ' 个字',
     BAD_MEDIA:        '形态不认识，只能是 视频 / 文章 / 播客 / 长访谈',
     DUPLICATE:        '这条内容已经在库里了（同一个来源下标题不能重复）',
+    MISSING_ID:       '不知道要动哪一条（缺少 id）',
     WRITE_FAILED:     '没存进去，稍后再试一次',
+    PATCH_FAILED:     '没改成功，稍后再试一次',
+    DELETE_FAILED:    '没删掉，稍后再试一次',
     NO_SDK:           '云端组件没加载成功，稍后再试',
     NO_CLIENT:        '云端连接没建起来，稍后再试'
   };
@@ -271,6 +274,26 @@
     return fail('WRITE_FAILED', res.error || res.reason);
   }
 
+  /* ---------- 把 db.js 的**改**结果，翻译成契约要的形状（Day 22） ----------
+     ⚠️ 和 entryWriteFail 分开写、不共用，是因为**失败的含义不一样**：
+     新增失败说「没存进去」，改失败说「没改成功」—— 两句话给人的下一步动作不同。
+     共用一个翻译器，就会出现「改了一条，却提示『没存进去』」这种看着像另一回事的话。
+     ⚠️ 23505 在这里的含义也不同：不是「这条已经在了」，而是
+     「你改成的新标题，跟**同来源下另一条**撞了」—— 所以另给一句话。 */
+  function entryPatchFail(res) {
+    if (res.reason === 'no-sdk') return fail('NO_SDK');
+    if (res.reason === 'no-client') return fail('NO_CLIENT');
+    if (res.error && String(res.error.code) === '23505') return fail('DUPLICATE', res.error);
+    return fail('PATCH_FAILED', res.error || res.reason);
+  }
+
+  /* ---------- 把 db.js 的**删**结果，翻译成契约要的形状（Day 22） ---------- */
+  function entryDeleteFail(res) {
+    if (res.reason === 'no-sdk') return fail('NO_SDK');
+    if (res.reason === 'no-client') return fail('NO_CLIENT');
+    return fail('DELETE_FAILED', res.error || res.reason);
+  }
+
   /* ---------- 对外的主函数 ----------
      入参：{ title, sourceId, summary?, media? }
      出参：成功 { ok:true, id, title, source_id, kind, media, created_at, row }
@@ -328,6 +351,101 @@
     });
   }
 
+  /* ---------- 对外的主函数：改一条（Day 22 加） ----------
+     入参：{ id, title, sourceId, summary?, media? }
+           （和 postEntry 一样的四个内容字段，只是多了一个「改哪一条」的 id）
+     出参：成功 { ok:true, id, title, source_id, kind, media, created_at, row }
+           失败 { ok:false, code, message, detail? }
+
+     ⚠️ 为什么这里**不做查重**（和 postEntry 明显不同）：
+     postEntry 是「凭空多一条」，重名必须提前拦；
+     改的却是**我自己这一条** —— 万一用户只改摘要、标题一个字没动，
+     再查一次重就会把「我自己」查出来，把一次正常的修改误判成重复。
+     所以这里的重名兜底**交给数据库的唯一约束**（撞了会回 23505，被翻成 DUPLICATE）。
+
+     ⚠️ 只允许改这四样内容：标题 / 来源 / 摘要 / 形态。
+     id、kind、created_via、created_at 是这一行的「身份」，一个字都不许动 ——
+     改 kind 会把内容改成另一种数据、改 created_via 会冒充别人写的。
+     数据库那一侧的策略里也写死了「这几样改了就不放行」（见 schema.sql Day 22 段），
+     这里是第二道；两处都有，是因为页面代码可以被绕过。 */
+  function patchEntry(input) {
+    var it = input || {};
+
+    var id = String(it.id == null ? '' : it.id).trim();
+    if (!id) return Promise.resolve(fail('MISSING_ID'));
+
+    /* 内容字段的校验**复用同一个 validateEntry**，不另抄一份规则。
+       ⚠️ 抄一份迟早会变成「新增时说不超长、改的时候说超长」。 */
+    var v = validateEntry(it);
+    if (!v.ok) return Promise.resolve(v);
+
+    var patch = {
+      source_id: v.value.sourceId,
+      title: v.value.title,
+      media: v.value.media,
+      summary: v.value.summary || null
+    };
+
+    return DB.updateContent({ id: id, source_id: patch.source_id, title: patch.title,
+                              media: patch.media, summary: patch.summary })
+      .then(function (w) {
+        if (!w.ok) return entryPatchFail(w);
+
+        var r = w.row;
+        return {
+          ok: true,
+          id: r.id,
+          title: r.title,          /* ← 取**改完之后库里的值**，不是我们发过去的副本 */
+          source_id: r.source_id,
+          kind: r.kind,
+          media: r.media,
+          created_at: r.created_at,
+          row: r
+        };
+      }).catch(function (e) {
+        return fail('PATCH_FAILED', String((e && e.message) || e));
+      });
+  }
+
+  /* ---------- 对外的主函数：删一条，并**回查证明它真的没了**（Day 22 加） ----------
+     入参：id —— 要删哪一条
+     出参：成功 { ok:true, id, removed:true }
+           失败 { ok:false, code, message, detail? }
+
+     ⚠️⚠️ 这一步是今天最该讲清的地方：「删掉」怎么算数？
+     只看「删除那一下没报错」是不够的 ——
+     数据库把删除挡住时可能给的是「成功、删了 0 行」，不报错。
+     所以这里删完之后**再查一次**（selectEntries），拿「那一行的 id 还在不在返回里」
+     当证据：不在了才算真的删掉了。
+     「没看到报错」不是证据，「回查之后确实不在」才是。 */
+  function deleteEntry(id) {
+    var wanted = String(id == null ? '' : id).trim();
+    if (!wanted) return Promise.resolve(fail('MISSING_ID'));
+
+    return DB.deleteContent(wanted).then(function (w) {
+      if (!w.ok) return entryDeleteFail(w);
+
+      /* 回查：把整张内容表重新读一遍，找那个 id 还在不在。 */
+      return DB.selectEntries().then(function (r) {
+        if (!r.ok) return entryDeleteFail(r);
+
+        var rows = r.rows || [];
+        for (var i = 0; i < rows.length; i++) {
+          if (rows[i] && rows[i].id === wanted) {
+            /* 删是「成功」回来的，可那一行**还在** ——
+               说明数据库其实没删（最可能是权限没开）。
+               这种情况必须当场说出来，绝不能报「删掉了」。 */
+            return fail('DELETE_FAILED', '数据库说删了，但回查时这一行还在 —— 多半是删除权限没开');
+          }
+        }
+
+        return { ok: true, id: wanted, removed: true };
+      });
+    }).catch(function (e) {
+      return fail('DELETE_FAILED', String((e && e.message) || e));
+    });
+  }
+
   /* 本地日期（北京时间），形如 2026-10-03。
      ⚠️ 不用 toISOString()：那个给的是 UTC，国内晚上 8 点后会算成第二天。 */
   function localDate() {
@@ -344,6 +462,9 @@
     fetchSources: fetchSources,
     /* 写（Day 18） */
     postEntry: postEntry,
+    /* 写（Day 22）：改一条 / 删一条 */
+    patchEntry: patchEntry,
+    deleteEntry: deleteEntry,
     /* 校验单独也放出来：页面可以在打字的时候就先提示，不用等到提交。
        ⚠️ 放出来的只是**同一个函数**，不是另抄一份规则 ——
        否则「打字时说不超长、提交时说超长」这种事迟早发生。 */
