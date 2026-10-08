@@ -9,7 +9,179 @@
 
 ---
 
-## Day 21｜2026-10-07　第三周验收：逐项对证据，缺项照实说
+## Day 22｜2026-10-08　PATCH / DELETE 上线：增删改查四类操作闭环
+
+> 今天的板块：① PATCH 实现　② DELETE 实现　③ 四类操作闭环验证。
+> 完成标准：PATCH 修改一条数据生效；DELETE 删除后 GET 不再返回；四类操作闭环。
+> **今天不做**：批量操作、用户系统。
+
+**做了什么**
+
+**① 接口层加两个写函数**（`assets/db.js`）
+
+| 函数 | 干什么 | 关键判据 |
+| --- | --- | --- |
+| `updateContent(row)` | 按 `id` 改一条 | **返回里必须有那一行**才算改成 |
+| `deleteContent(id)` | 按 `id` 删一条 | 用 `.select()` 把被删的那行捞回来，区分「删了 0 行」和「删了 1 行」 |
+
+两个函数都**不带 id 就当场挡回** —— 少这一步，一条不带条件的 `UPDATE` / `DELETE`
+会改到 / 删掉整张表。这是这一层最不能犯的错。
+
+**② 接口层加两个契约函数**（`assets/cloud.js`）
+
+- `patchEntry(input)` / `deleteEntry(id)`，外加 `MISSING_ID` / `PATCH_FAILED` / `DELETE_FAILED`
+  三个错误码和 `entryPatchFail` / `entryDeleteFail` 两个翻译器。
+- **`patchEntry` 刻意不做「先查重」**（和 `postEntry` 明显不同）：
+  POST 是「凭空多一条」，重名必须提前拦；改的却是**我自己这一条** ——
+  万一只改摘要、标题一字没动，再查一次重就会把「我自己」查出来，
+  把一次正常修改误判成重复。重名兜底交给数据库的唯一约束。
+- **`deleteEntry` 删完必须回查**（今天的地基，见下）。
+
+**③ 界面：每一条内容加「改 / 删」入口**（`assets/app.js`）
+
+- `entryFromRow()` 补上 `id` / `sourceId` / `summary` —— 不加 `id` 就无从定位要改 / 删哪条。
+- `renderEntry()` 给每条画两个按钮；只给**真的从云端读回来、有 id 的**条目画
+  （本地写死的那些没有 id，画了必然失败，不如不画）。
+- 新增 `openEditForm()` / `askDeleteEntry()` / `cancelEditEntry()`。
+- **表单复用**：编辑和新增要填的东西完全一样，所以**不新做表单**，
+  让「新增一条」那块进入「编辑模式」（旧值填回、按钮变「保存修改」、多一个「取消」）。
+  另做一份必然导致「新增时校验、编辑时忘了校验」这种不一致。
+
+**④ 数据库开两扇门**（`db/schema.sql` 追加 Day 22 段，并已在云端执行）
+
+`contents` 表上 `anon` 原来只有 `SELECT` + `INSERT`，今天补上 `UPDATE` + `DELETE`：
+
+```sql
+GRANT UPDATE ON TABLE public.contents TO anon;
+GRANT DELETE ON TABLE public.contents TO anon;
+
+CREATE POLICY contents_update_guard ON contents FOR UPDATE TO anon, authenticated
+  USING (kind = 'entry')
+  WITH CHECK (kind = 'entry' AND source_id IS NOT NULL
+    AND char_length(btrim(title)) BETWEEN 1 AND 60
+    AND char_length(COALESCE(summary,'')) <= 200
+    AND media IN ('video','article','podcast','talk')
+    AND created_via = current_user);
+
+CREATE POLICY contents_delete_guard ON contents FOR DELETE TO anon, authenticated
+  USING (kind = 'entry');
+```
+
+**为什么这么做（今天最硬的一条设计）**
+
+**⚠️ `UPDATE` 策略要 `USING` + `WITH CHECK` 两半，`DELETE` 只要 `USING`。**
+
+| 两半 | 管什么 | 只写一半会怎样 |
+| --- | --- | --- |
+| `USING` | **哪几行**你有权动（进门前筛） | 只给 `USING` → 能把任意一行改成任意样子（包括把 `kind` 改成 `read`） |
+| `WITH CHECK` | 改完**必须仍然长这样**（出门前再筛） | 只给 `WITH CHECK` → 等于整张表每一行都能改（门槛没了） |
+
+`DELETE` 没有「改完的样子」可验，所以只有 `USING`。
+`WITH CHECK` 里锁死 `kind = 'entry'` 和 `created_via = current_user` ——
+这是这一行的「身份」，改了就等于「换一种数据」或「冒充别人写的」。
+
+**⚠️ 删除为什么比新增更容易出事**
+
+- 新增写错，最坏是库里**多一条**，删掉就回去了 —— **可逆**。
+- 改是**覆盖原值**（旧标题 / 旧摘要没有任何地方还留着）；删是**不可逆**的。
+- 更阴的一点：PostgREST 删一条**本来就不存在的**记录，返回的是
+  「成功、删了 0 行」，**不报错**。所以「没报错」根本不能当成功判据 ——
+  那就成了「删错了也以为删对了」的入口。
+
+**确认加在哪？两处：**
+
+1. **界面上**：内容库每条的「删」按钮走 `confirmDanger()`，弹出确认框，说清三件事 ——
+   删的是云端哪一份、刷新后什么变化、**能不能撤销**。
+   （AGENTS 第 4 条第 11 项：每加一个删除入口都要先问；这是本项目第 2 个删除入口。）
+2. **数据库那一侧**：`contents_delete_guard` 的 `USING (kind='entry')` ——
+   只能删「内容库」这一类，删不了「今日一篇」（防顺手删掉首页内容）。
+
+**怎么证明能用**
+
+**① 动手之前先量**：写了个权限探针，用**不存在的 id** 去 update / delete。
+用不存在的 id 的好处：即使权限开着也只「改 0 行」，**真实数据一行不碰**，可以随便跑。
+
+三次跑、三种结果，把问题彻底分清了：
+
+| 跑的时间 | 结果 | 说明 |
+| --- | --- | --- |
+| 第 1 次 | `Uncaught TypeError` | **线上还是旧版**，根本没有 `updateContent` 这个函数 |
+| 第 2 次（发布后） | `DATABASE_42501 permission denied` | 权限确实没开 |
+| 第 3 次（开权限后） | `empty-result` | ✅ 权限开了（用不存在的 id，「0 行」本来就是对的） |
+
+> ⚠️ **教训：测「权限有没有开」之前，必须先确认「线上是哪一版」。**
+> 不然会把「旧版本没有这个函数」误判成「权限没开」，白折腾一轮。
+
+**② 全链路真走一遍**（走**页面上的按钮**，不是绕过去直接调接口 ——
+要验的是「人点了按钮到底行不行」）：
+
+| # | 做了什么 | 实测值 |
+| --- | --- | --- |
+| 1 | 新增一条测试内容 | `u-2026-10-08-fpc`，`created_via = anon` |
+| 2 | 点「改」按钮，改标题 | 表单预填旧值 `Day22 验证条目 889170` |
+| 3 | 保存后刷新，从云端重读 | 标题 → `Day22 验证条目 889170（已改）` ✅ |
+| 4 | 点「删」按钮 | 确认框弹出，列出 3 条后果（含「不能撤销」） |
+| 5 | 删完刷新，从云端重读 | 15 条 → **14 条**；搜该 id → **0 条** ✅ |
+| 6 | 接口层直接回查 | `{"ok":true,"totalRows":14,"stillThere":0}` |
+
+**③ 报错检查（两样一起盯，缺一样都会漏）**：
+
+| 检查 | 结果 |
+| --- | --- |
+| JS 异常（`Runtime.exceptionThrown`） | **0 条** |
+| `console.error` | **0 条** |
+| 数据面 4xx / 5xx | **0 条** |
+
+**④ 过程中抓到一个真 bug 并修掉**
+
+第一次跑验证时出了 `TypeError: Cannot read properties of undefined (reading 'then')`。
+
+原因：`loadLibrary()` **没有 return Promise**（只有三条裸 `return;`），
+而删除那一步写了 `loadLibrary().then(...)` 去等它重读完。
+
+修法：让 `loadLibrary()` 返回 Promise（三条提前 return 的分支也要回 `Promise.resolve()`）。
+7 个调用点里只有 1 处用 `.then`，其余 6 处无视返回值，**完全兼容**。
+
+> ⚠️ **这个 bug 光看代码、光跑语法检查都发现不了，只有真跑一遍才会暴露。**
+> AGENTS 第 3 条「改完必须证明能用」的意义就在这里。
+
+**交付截图**（两张，都在线上正式域名拍的）
+
+| 文件 | 图里有什么 |
+| --- | --- |
+| `day22-1-PATCH-前后对比.png` | 顶部横幅写「改之前 vs 改之后」的值；列表里那一条标题已变（黄框标出） |
+| `day22-2-DELETE-回查已消失.png` | 顶部横幅写「删前 15 条 / 删后 14 条 / 回查 0 条」；列表里那一条已消失 |
+
+> 做法要点：把「改之前 / 改之后」的值做成**页面顶部的一条横幅**再拍 ——
+> 不然一张图里只有一个状态，「前后对比」根本看不出来。
+
+**改动的文件**
+
+| 文件 | 属于哪天 | 改了什么 |
+| --- | --- | --- |
+| `assets/db.js` | Day 22 | 新增 `updateContent` / `deleteContent` |
+| `assets/cloud.js` | Day 22 | 新增 `patchEntry` / `deleteEntry` ＋ 3 个错误码 ＋ 2 个翻译器 |
+| `assets/app.js` | Day 22 | `entryFromRow` 补 `id`；`renderEntry` 加按钮；3 个新函数；表单改两用；`loadLibrary` 返回 Promise |
+| `assets/data.js` | Day 22 | 新增 `libraryEdit`（按钮文案 ＋ 删除确认话） |
+| `assets/style.css` | Day 22 | `.entry-ops` / `.entry-op` / 编辑态样式 |
+| `db/schema.sql` | Day 22 | 追加 Day 22 段（GRANT ＋ 两条策略）；改掉 Day 18 段两处过时注释 |
+| `docs/api-contract.md` | Day 18 的文件，Day 22 补 | PATCH / DELETE 从「第 4 周待做」改成正式契约（05 / 06）＋ 代价说明 |
+| `.workbuddy/memory/README-FIRST.md` | 收尾 | 新增「云端数据库怎么改」一节（Day 22 摸清的通道，别再重复查） |
+
+**这一版没做的（说清楚，免得以为是漏了）**
+
+| 没做的 | 为什么 |
+| --- | --- |
+| 批量操作 | 今天的清单明确不做 |
+| 用户系统 | PRD 第 2 条明确不做登录 |
+| 软删除 | 今天的**余力加练**，待定 |
+
+⚠️ **开放面变宽了，代价写在明处**：不做登录意味着这几个写接口**任何人打开网页都能调** ——
+现在能读、能增、能改、也能删。策略只能挡住「改错类别的数据」和「删错类别的数据」，
+**挡不住「同一个人把别人加的内容删掉」**（因为根本没有「谁」这个概念）。
+这是明知的取舍，不是没想到。
+
+---
 
 > 今天的板块：① 自查周验收表　② 同伴交叉验证　③ 缺项如实标记。
 > **今天不写新功能**；顺手发现的问题只记录、不动手（下周处理）。

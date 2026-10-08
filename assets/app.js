@@ -937,6 +937,13 @@
        'ok'    → 真的去云端读（默认，也是唯一的产品路径）
        'empty' → 演示「一条都没有」（不进网络）
        'error' → 演示「读取失败」（不进网络） */
+  /* 读内容库。
+     【Day 22 改】现在**返回一个 Promise**，读完之后 resolve。
+     为什么：删除那一步需要「等它重读完再干活」（比如把滚动位置放回去）——
+     不返回 Promise 的话，调用方写 `loadLibrary().then(...)` 会拿到 undefined 直接崩
+     （Day 22 实测踩到：`TypeError: Cannot read properties of undefined (reading 'then')`）。
+     ⚠️ 三条提前 return 的分支也必须回一个 Promise，否则调用方在那些路径下还是拿到 undefined。
+     对原来那 6 个「调完不管」的调用方**没有影响** —— 它们照样无视返回值。 */
   function loadLibrary() {
     libState = 'loading';
     renderLibrary();
@@ -944,16 +951,16 @@
     if (libMode === 'empty') {
       libState = 'empty';
       renderLibrary(); renderLibraryDemo();
-      return;
+      return Promise.resolve();
     }
     if (libMode === 'error') {
       libState = 'error'; libReason = 'query-failed';
       renderLibrary(); renderLibraryDemo();
-      return;
+      return Promise.resolve();
     }
 
     var id = ++libReqId;
-    G.fetchEntries().then(function (res) {
+    return G.fetchEntries().then(function (res) {
       /* ⚠️ 只认**最后一次**发出的那次请求。
          连着点两次重试、或者切走又切回来时，会有两次请求同时在飞，
          先发的可能后回来 —— 不挡一下，页面就被旧结果盖住了。 */
