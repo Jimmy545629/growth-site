@@ -7,7 +7,8 @@
    整段搬去了 `assets/db.js`。**本文件从此不知道 SDK 长什么样。**
    这里只留下四件事：
      ① 校验入参（validateEntry —— 纯函数）
-     ② 错误码换成中文（CODE_TEXT —— 页面上提示语的**唯一**来源）
+     ② 失败换成人话（FAIL_TEXT —— 读的原因 ＋ 写的错误码，页面上提示语的**唯一**来源。
+        Day 23 从原来的 CODE_TEXT 扩成这一张总表）
      ③ 编排（postEntry：先校验 → 再查重 → 再写入 → 再读回）
      ④ 保证返回的形状跟契约一致（docs/api-contract.md）
 
@@ -34,7 +35,8 @@
 
    【断网 / 云端读不到会怎样】
    **不白屏、不报错、不假装有数据。**
-   读接口返回 { ok:false, reason:… }，由 app.js 决定把「这次没读到」如实说出来，
+   读接口返回 { ok:false, reason:…, message:'…中文…' }，
+   由 app.js 把 message 如实说出来（Day 23 起页面不再自己翻中文），
    并给一个「重试」的出口。宁可说「这次没读到」，也不要编一条数据顶上
    （这是 PRD 硬约束 C4 的精神：不许编）。
    ⚠️ Day 18 起，内容库三列**不再退回本地内容** —— 因为本地那份已经删了，
@@ -56,13 +58,20 @@
      一、读接口
      ============================================================
      三条读接口（热搜 / 内容库三列 / 来源名单）**故意共用同一种形状**：
-     { ok:true, rows:[…] } 或 { ok:false, reason:… }。
-     这样调用方只要记一套「ok + reason」，不用为多一个接口多学一种写法。
+     { ok:true, rows:[…] } 或 { ok:false, reason:…, message:… }。
+     这样调用方只要记一套「ok + reason + message」，不用为多一个接口多学一种写法。
+     ⚠️ message 是 Day 23 加的**中文提示**（原来只有英文 reason）——
+     页面直接把它画出来就行，不用自己再翻一遍。
      ============================================================ */
 
-  /* 读失败时的形状。detail 只进控制台、不上页面（契约 2.4）。 */
+  /* 读失败时的形状（Day 23 改）。
+     ⚠️ 原来只有 reason（小写英文），**不带中文** —— 页面上要显示一句人话，
+     就得各自去 data.js / app.js 里翻，于是「同一个原因」在三个地方
+     各写了一句不一样的中文（内容库一套、热搜一套、表单一套）。
+     现在跟写接口一个规矩：**失败就带一句用户看得懂的 message**。
+     detail 只进控制台、不上页面（契约 2.4）。 */
   function readFail(reason, detail) {
-    return { ok: false, reason: reason, detail: detail };
+    return { ok: false, reason: reason, message: failText(reason), detail: detail };
   }
 
   /* ---------- 01 · 读当日热搜 ----------
@@ -73,7 +82,7 @@
            外面的东西一律不当成「长得对」。
      出参：{ ok:true, rows:[…], date:'2026-10-03', updatedAt:'2026-10-06T22:50:11+08:00',
              total:库内这一天共几条 }
-           { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty' }
+           { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty', message:'…中文…' }
      ⚠️ updatedAt 是 Day 20 加的**新增字段**（原有字段一个没改），
         见 docs/api-contract.md。老字段 date / total / rows 的含义都没动。 */
   function fetchHotTopics(limit) {
@@ -132,7 +141,7 @@
      那是最容易让人以为「页面坏了」的一种设计。
 
      出参：{ ok:true, rows:[ {…contents 那一行的字段…, sources:{…}} ], total }
-           { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty' }
+           { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty', message:'…中文…' }
      ⚠️ 这一层**只取数、不分组**：分组是页面的事。
         「N 天前」怎么算也是页面的事（rules.js 的 daysAgo()）。
         这里只负责把数据原样带回去，形状跟契约一致。 */
@@ -154,7 +163,7 @@
      所以这份名单必须现读，不能在本地另写一份（那就是第二个来源了）。
 
      出参：{ ok:true, rows:[{ id, name, column_key, kind }] }
-           { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty' } */
+           { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty', message:'…中文…' } */
   function fetchSources() {
     return DB.selectSources().then(function (res) {
       if (!res.ok) return readFail(res.reason, res.error);
@@ -180,10 +189,34 @@
      throw 只留给真正的意外 bug。这样调用方永远只要看 result.ok。
      ============================================================ */
 
-  /* 错误码 → 页面上显示的中文。
-     ⚠️ 提示语**只有这一处**。页面不许自己再写一句差不多的话 ——
-     同一个错误两种说法，看到的人会以为是两回事。 */
-  var CODE_TEXT = {
+  /* ============================================================
+     ★ 失败文案总表（Day 23 新）——「失败原因 → 中文」的**唯一一处**
+     ============================================================
+     改之前，这张表只有写 / 校验用的错误码（那时叫 CODE_TEXT）；
+     读失败的几种说法散在 data.js（libraryFail）和 app.js
+     （failHint / paintHot）里。结果是**同一个原因有三套中文** ——
+     比如「云端组件没加载成功」，内容库说一种、热搜换一种、表单又说一种；
+     而且热搜那一处**漏了「连接没建起来」这一种**，会直接落到「原因不明」。
+
+     现在全部收在这一张表里：读失败（reason）和写 / 校验失败（code）
+     都从这里取中文。页面（app.js）只负责把 message 画出来，**不许另写一句**。
+
+     ⚠️ 键为什么有两种写法（这是契约定的，不是我随便起的名）：
+       · 读接口的失败原因是**小写连字符**：'no-sdk' / 'no-client' /
+         'query-failed' / 'empty'
+       · 写 / 校验接口的错误码是**大写**：MISSING_TITLE / WRITE_FAILED / …
+     两者说的其实是同一件事的，用下面的 FAIL_ALIAS 指过来 ——
+     这样「云端没连上」那几句话**只有一份**，不会变成两处各写一句。 */
+  var FAIL_TEXT = {
+    /* ---------- 一、连不上：读、写都会遇到 ---------- */
+    'no-sdk':        '云端组件没加载成功 —— 可能是没联网，也可能网络被拦了。',
+    'no-client':     '云端连接没建起来 —— 多半是没联网。',
+
+    /* ---------- 二、云端没给结果（读） ---------- */
+    'query-failed':  '这次没读到云端的内容 —— 可能没联网，也可能只是一时抽风。',
+    'empty':         '云端还没有这份数据 —— 不是坏了，是还没录进来。',
+
+    /* ---------- 三、写 / 校验（Day 18 / Day 22 那套错误码） ---------- */
     MISSING_TITLE:    '标题不能为空',
     TITLE_TOO_LONG:   '标题太长了，最多 ' + C.entry.titleMax + ' 个字',
     MISSING_SOURCE:   '请选择一个来源',
@@ -193,18 +226,27 @@
     MISSING_ID:       '不知道要动哪一条（缺少 id）',
     WRITE_FAILED:     '没存进去，稍后再试一次',
     PATCH_FAILED:     '没改成功，稍后再试一次',
-    DELETE_FAILED:    '没删掉，稍后再试一次',
-    NO_SDK:           '云端组件没加载成功，稍后再试',
-    NO_CLIENT:        '云端连接没建起来，稍后再试'
+    DELETE_FAILED:    '没删掉，稍后再试一次'
   };
 
+  /* 写接口用的是大写码，跟读接口那两句说的是同一件事 —— 指过去，不另抄一份。
+     ⚠️ 不这么做的话，「云端组件没加载成功」就会在这张表里被写成两份，
+     那就等于没统一。 */
+  var FAIL_ALIAS = { NO_SDK: 'no-sdk', NO_CLIENT: 'no-client' };
+
+  /* 表里查不到时的兜底。**只有这一句**，别处不许再写「出了点问题」。 */
+  var FAIL_FALLBACK = '这次没成功，稍后再试一次';
+
+  /* 给一个失败原因 / 错误码，换回一句中文。 */
+  function failText(key) {
+    var k = FAIL_ALIAS[key] || key;
+    return FAIL_TEXT[k] || FAIL_FALLBACK;
+  }
+
+  /* 写 / 校验失败：{ ok:false, code, message, detail }。
+     message 是给用户看的中文；detail 只进控制台（契约 2.4）。 */
   function fail(code, detail) {
-    return {
-      ok: false,
-      code: code,
-      message: CODE_TEXT[code] || '出了点问题',
-      detail: detail
-    };
+    return { ok: false, code: code, message: failText(code), detail: detail };
   }
 
   /* ---------- 入参校验（纯函数） ----------

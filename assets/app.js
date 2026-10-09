@@ -929,7 +929,7 @@
      方便随时把这两种状态调出来检查。 */
   var libMode = 'ok';          /* 'ok' 读云端 ｜ 'empty' 演示空 ｜ 'error' 演示失败 */
   var libState = 'loading';    /* 'loading' | 'ready' | 'empty' | 'error' */
-  var libReason = '';          /* 读失败的原因分类（no-sdk / no-client / query-failed…） */
+  var libMessage = '';         /* 读失败时那句中文（Day 23 起由 cloud.js 的失败形状直接给，页面不另写） */
   var libCache = [];           /* 上一次成功读回来的三栏（演示区要用它画「正常」那一格） */
   var libReqId = 0;            /* 请求序号：只认最后一次发出的那次 */
 
@@ -954,7 +954,8 @@
       return Promise.resolve();
     }
     if (libMode === 'error') {
-      libState = 'error'; libReason = 'query-failed';
+      /* 演示模式不进网络，所以没有接口给的 message —— 用列表状态那句通用兜底。 */
+      libState = 'error'; libMessage = D.listStates.error.hint;
       renderLibrary(); renderLibraryDemo();
       return Promise.resolve();
     }
@@ -973,13 +974,16 @@
         libState = total ? 'ready' : 'empty';
       } else {
         libState = 'error';
-        libReason = (res && res.reason) || 'query-failed';
+        /* ⚠️ 中文提示**直接取接口给的那句**（cloud.js 的 FAIL_TEXT），页面不另写一句。
+           Day 23 之前这里拿的是 reason（英文），再在页面里翻中文 —— 那正是
+           「同一个原因好几种说法」的来源。 */
+        libMessage = (res && res.message) || D.listStates.error.hint;
       }
       renderLibrary();
       renderLibraryDemo();
     }).catch(function () {
       if (id !== libReqId) return;
-      libState = 'error'; libReason = 'query-failed';
+      libState = 'error'; libMessage = D.listStates.error.hint;
       renderLibrary(); renderLibraryDemo();
     });
   }
@@ -998,7 +1002,7 @@
     if (libState === 'error') {
       add(box, ListState('error', {
         title: D.libraryFail.title,
-        hint: failHint(libReason),
+        hint: libMessage,
         onRetry: function () { loadLibrary(); }
       }));
       return;
@@ -1012,15 +1016,13 @@
     add(box, renderColumns(libCache));
   }
 
-  /* 读失败时那句「为什么」，按原因分开说 ——
-     「不知道哪坏了」和「知道是没联网」，对用户是两件事。 */
-  function failHint(reason) {
-    var T = D.libraryFail || {};
-    if (reason === 'no-sdk') return T.noSdk;
-    if (reason === 'no-client') return T.noClient;
-    if (reason === 'empty') return T.empty;
-    return T.query;
-  }
+  /* 【Day 23 删掉了 failHint()】
+     它原来是「读失败的原因（英文）→ 中文」的翻译器，中文写在 data.js 的
+     libraryFail 里。问题是：首页热搜那边**也有一套自己的翻译器**（paintHot 里
+     的 failNoSdk / failEmpty / failQuery），两边措辞不一样，而且热搜那套
+     漏了 no-client，会落到「原因不明」。
+     → 现在中文统一由 cloud.js 的 FAIL_TEXT 给（失败返回里直接带 message），
+       页面只把 message 画出来。**同一个原因，全站一句中文。** */
 
   /* 把云端取回来的那些行，按「来源属于哪一栏」分到三列里。
      ⚠️ 分组依据是 `sources.column_key` ——「这条属于哪一栏」这件事
@@ -1477,8 +1479,11 @@
       } else {
         entrySources = [];
         /* 读不到要说清是哪一种读不到，而且**不影响页面别的部分** ——
-           「来源读不到」是个次要问题，不该把整页拖死。 */
-        entrySourcesNote = D.libraryAdd.sourcesFail + '（' + res.reason + '）';
+           「来源读不到」是个次要问题，不该把整页拖死。
+           ⚠️ Day 23 改（今天要回答的「裸报错」就是这一处）：
+           括号里原来是 res.reason —— 一个**英文错误码**（如 query-failed），
+           等于把内部术语直接摊在用户面前。现在换成接口给的中文 message。 */
+        entrySourcesNote = D.libraryAdd.sourcesFail + '（' + res.message + '）';
       }
       renderLibraryAdd();
     });
@@ -2042,7 +2047,8 @@
       if (!box.isConnected && document.getElementById('hot') !== box) return;
       paintHot(box, T, res, n);
     }).catch(function () {
-      paintHot(box, T, { ok: false, reason: 'query-failed' }, n);
+      /* 走到这里说明 cloud.js 自己抛了异常（罕见）—— 补一句中文兜底再画。 */
+      paintHot(box, T, { ok: false, reason: 'query-failed', message: T.failUnknown }, n);
     });
   }
 
@@ -2054,10 +2060,12 @@
     clear(box);
 
     if (!res || !res.ok) {
-      var why = T.failUnknown;
-      if (res && res.reason === 'no-sdk') why = T.failNoSdk;
-      else if (res && res.reason === 'empty') why = T.failEmpty;
-      else if (res && res.reason === 'query-failed') why = T.failQuery;
+      /* ⚠️ Day 23：中文提示**直接用接口给的那句**（cloud.js 的 FAIL_TEXT）。
+         这里原来自己按 reason 挑 T.failNoSdk / T.failEmpty / T.failQuery ——
+         那三句跟内容库那边说的不一样（同一个原因两种说法），而且**漏了 no-client**：
+         遇到「云端连接没建起来」会落到 failUnknown，显示成「原因不明」。
+         T.failUnknown 现在只作**兜底**（连 res.message 都拿不到时，罕见）。 */
+      var why = (res && res.message) || T.failUnknown;
 
       var card = h('article', { class: 'hot-card is-fail', 'aria-label': T.title });
       var head = h('div', { class: 'hot-head' });

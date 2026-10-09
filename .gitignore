@@ -15,8 +15,12 @@ Desktop.ini
 .idea/
 
 # 环境变量（万一以后要用到，绝不提交）
-.env
-.env.local
+# ⚠️ Day 23 改：原来只有 .env / .env.local 两行 ——
+# 但同类的 .env.production / .env.development / .env.test 这些**挡不住**（实测
+# `git check-ignore .env.production` 当时返回「不忽略」），而它们里面同样会放密钥。
+# 换成通配 .env* 才一个不漏 —— 这也是「密钥不进仓库」那条红线的一部分。
+# （以后若真要放一个**不含密钥**的模板 .env.example，单独写一行 `!.env.example` 放行即可。）
+.env*
 
 # WorkBuddy 的项目记忆 / 临时工具（跟老项目一样，不上传）
 .workbuddy/

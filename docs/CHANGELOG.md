@@ -9,6 +9,111 @@
 
 ---
 
+## Day 23｜2026-10-09　密钥排查 + 三类错误提示统一
+
+> 今天的板块：① 密钥排查（红线优先）　② `.env` 与忽略规则检查　③ 三类错误提示统一。
+> 完成标准：全仓库搜不到密钥特征词；`.env` 不在仓库且被忽略；三类错误都返回中文提示。
+> **今天不做**：加复杂异常处理框架；改业务逻辑。
+> 完整记录见 [`docs/day23-secret-and-errors.md`](day23-secret-and-errors.md)。
+
+**做了什么**
+
+**① 密钥排查（红线优先）—— 结果 0 条**
+
+固定了一份「真密钥特征词清单」（`service_role` / `sk-…` / `eyJ…` / `BEGIN …PRIVATE KEY` /
+`wbsk_…` / 数据库连接串 / Slack、Google 密钥 七类），并写下**一条可复现的扫描命令**：
+
+```bash
+git grep -nI -E "service_role|serviceRole|SUPABASE_SERVICE|service[_-]key|sk-[A-Za-z0-9]{16,}|eyJ[A-Za-z0-9_-]{20,}|BEGIN [A-Z ]*PRIVATE KEY|wbsk_[A-Za-z0-9]{8,}|postgres(ql)?://[^:]+:[^@]+@|xox[baprs]-|AIza[A-Za-z0-9_-]{35}" -- .
+```
+
+- 用 `git grep`（只搜仓库追踪的 41 个文件，自动跳过 `.git/` `.tmp/`），结果才可信。
+- **结果：无输出，退出码 1 = 0 条命中。**
+- **历史提交也查了**（`git log -S` 搜 `service_role` / `PRIVATE KEY` / `wbsk_`）→ 全空，
+  说明不只现在干净，**历史上也从没出现过**。
+
+> ⚠️ 仓库里唯一「像钥匙」的 `wbpk_…` 是**可发布公开键**（不是 `wbsk_` 服务端密钥），
+> 只表明「我是哪个应用」、本身不带权限，放前端是设计上就该如此，**不算泄露**。
+> 判断关键就是前缀：`wbpk_` 能放前端，`wbsk_` 绝对不能。
+
+**② `.env` 与忽略规则检查 —— 顺手补了一个洞**
+
+`.gitignore` 原来只有 `.env` / `.env.local` 两行，**挡不住 `.env.production` /
+`.env.development` / `.env.test`**（实测 `git check-ignore .env.production` 返回「不忽略」）。
+将来谁建了 `.env.production` 并放密钥，会被原样提交上去。
+
+修法：两行合并成通配 **`.env*`**，一条挡住所有变体。改后 `git check-ignore` 对
+6 种变体（`.env` / `.env.local` / `.env.production` / `.env.development` / `.env.test` / `.env.staging`）
+**全部返回「已忽略」**；仓库里没有 `.env` 文件、本机也没有、也没有私钥类文件（`.pem` 等）。
+
+**③ 三类错误提示统一 —— 把「原因 → 中文」收敛成唯一一处**
+
+改之前：**同一个失败原因，页面上有三套中文**（内容库一套 / 热搜一套 / 表单一套），
+而且热搜那处**漏了 `no-client`**，会落到「原因不明」。
+另外 `app.js:1481` 有一句**真的英文裸报错**露给用户看（今天清单第一问的答案）：
+
+- **改前**：「来源列表没读到 —— 云端可能连不上。…（**query-failed**）」
+- **改后**：「来源列表没读到 —— 这一块暂时不能提交…（**这次没读到云端的内容 —— 可能没联网，也可能只是一时抽风。**）」
+
+改法：
+
+| 文件 | 怎么改 |
+| --- | --- |
+| `assets/cloud.js` | `CODE_TEXT`（只有写/校验码）→ **`FAIL_TEXT` 总表**，收进读失败的 4 种原因；`readFail()` 直接带中文 `message`；大写码 `NO_SDK`/`NO_CLIENT` 用 `FAIL_ALIAS` 指向小写 `no-sdk`/`no-client`，保证同句只有一份 |
+| `assets/app.js` | 删掉自己的翻译器 `failHint()`；内容库 / 热搜 / 表单三处**一律用接口给的 `message`**；修掉 `app.js:1481` 的英文裸报错；补上热搜漏掉的 `no-client` |
+| `assets/data.js` | 删掉两套重复中文（`libraryFail` 4 句、`hot` 段 3 句），只留标题 / 标签 / 兜底 |
+
+三类按**出错原因**划分：**第 1 类 连不上**（`no-sdk` / `no-client`）、
+**第 2 类 云端没给结果**（`query-failed` / `empty` / 写失败三码）、
+**第 3 类 填得不对**（校验类错误码）。
+
+**怎么证明能用**
+
+**① 纯逻辑验证**（不开浏览器，直接跑真代码）：
+
+```
+结果：20 项通过，0 项失败
+```
+
+关键几条：`no-sdk` 的 `message` 是中文、**不是英文码**；写接口 `NO_SDK` 与读接口
+`no-sdk` 是**同一句中文**；**热搜的 `no-client` 也有中文了**（旧版会落到「原因不明」）。
+
+**② 真机验证**（真跑页面、真制造三类错误，三个场景都命中预期）：
+
+| 场景 | 怎么制造 | 页面显示 |
+| --- | --- | --- |
+| ① 第 1 类 | 拦掉 SDK 的 CDN 域名 | 「云端组件没加载成功 —— 可能是没联网，也可能网络被拦了。」 |
+| ② 第 2 类 | 拦掉数据面域名 | 「这次没读到云端的内容 —— 可能没联网，也可能只是一时抽风。」 |
+| ③ 第 3 类 | 标题留空直接提交 | 「标题不能为空」 |
+
+**交付截图**（两张）
+
+| 文件 | 图里有什么 |
+| --- | --- |
+| `day23-1-secret-scan.png` | 密钥扫描命令 + 清单 + **大字「0 条命中」** + 历史搜索也空 |
+| `day23-2-three-errors.png` | 三类错误各一张**带地址栏**的真机图拼在一起，外加「裸报错改前 / 改后」对比 |
+
+**改动的文件**
+
+| 文件 | 属于哪天 | 改了什么 |
+| --- | --- | --- |
+| `assets/cloud.js` | Day 23 | `CODE_TEXT` → `FAIL_TEXT` 总表；`readFail()` 带中文 `message`；加 `FAIL_ALIAS` / `FAIL_FALLBACK` / `failText()` |
+| `assets/app.js` | Day 23 | 删 `failHint()`；三处改用 `message`；修掉 `:1481` 英文裸报错；补热搜漏的 `no-client` |
+| `assets/data.js` | Day 23 | 删两套重复中文（`libraryFail` 4 句、`hot` 3 句），只留标题 / 标签 / 兜底 |
+| `.gitignore` | Day 23 | `.env` / `.env.local` 两行 → 通配 `.env*` |
+| `docs/api-contract.md` | Day 18 的文件，Day 23 补 | 读失败形状补 `message`；`reason` 四取值表补中文；代码归属表 `CODE_TEXT`→`FAIL_TEXT`、读失败中文挪到 `cloud.js` |
+| `docs/day23-secret-and-errors.md` | Day 23 | 本文档（新增） |
+
+**这一版没做的（说清楚，免得以为是漏了）**
+
+| 没做的 | 为什么 |
+| --- | --- |
+| 复杂异常处理框架 | 今天的清单明确不做 |
+| 请求日志（时间 / 路径 / 结果） | 今天的**余力加练**，未做 |
+| 回补 Day 22 的 DELETE 接口 | Day 22 已全部收口，**无需再做** |
+
+---
+
 ## Day 22｜2026-10-08　PATCH / DELETE 上线：增删改查四类操作闭环
 
 > 今天的板块：① PATCH 实现　② DELETE 实现　③ 四类操作闭环验证。

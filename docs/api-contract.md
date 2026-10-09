@@ -266,17 +266,23 @@ DATABASE_42501   new row violates row-level security policy for table "contents"
 
 ```
 成功：{ ok: true,  rows: [ {…contents 那一行的字段…, sources: {…}}, … ], total: 13 }
-失败：{ ok: false, reason: 'no-sdk' | 'no-client' | 'query-failed' | 'empty' }
+失败：{ ok: false, reason: 'no-sdk' | 'no-client' | 'query-failed' | 'empty', message: '…中文…' }
 ```
 
 | 字段 | 说明 |
 | --- | --- |
 | `rows` | 每一行是 `contents` 的字段 ＋ 一个 `sources` 子对象（`name` / `platform` / `column_key` / `note`） |
 | `total` | 一共几条（方便页面核对，不用自己再数一遍） |
-| `reason` | 读失败的原因分类，页面按它给出不同的中文说法 |
+| `reason` | 读失败的原因分类（小写英文，**给代码判断用**） |
+| `message` | 读失败时**给用户看的中文**（**Day 23 新增**，页面直接画这一句） |
 
-⚠️ **形状跟 01 / 02 保持一致**：读接口一律 `{ok, reason}`，写接口一律 `{ok, code, message}`。
-调用方只要记**两套**形状，不用为每个接口学一种新写法。
+⚠️ **形状跟 01 / 02 保持一致**：读接口一律 `{ok, reason, message}`，写接口一律
+`{ok, code, message}`。调用方只要记**两套**形状，不用为每个接口学一种新写法。
+
+⚠️ **Day 23 起，读失败也带 `message`（中文）**：原来是「只有 `reason`（英文），
+页面各自翻中文」—— 结果同一个原因在内容库、热搜、表单三处各写了一句不一样的中文，
+热搜那处还漏了 `no-client`。现在「原因 → 中文」只有 `cloud.js` 的 `FAIL_TEXT` 一处，
+页面只负责把 `message` 画出来。
 
 ⚠️ **这一层只取数、不分组、不做业务判断**：
 分组（按 `column_key` 分三栏）、把云端字段还原成页面上要的形状，
@@ -285,14 +291,18 @@ DATABASE_42501   new row violates row-level security policy for table "contents"
 （Day 19 之前这个职责写在 `cloud.js` 里，Day 19 起搬到了 `db.js`；
 `cloud.js` 只在取回来之后判「空不空、算不算失败」并换成契约要的形状）。
 
-### 2b.4 `reason` 的四种取值
+### 2b.4 `reason` 的四种取值（对应的中文由 `message` 给出）
 
-| `reason` | 什么时候发生 | 页面上显示 |
+| `reason` | 什么时候发生 | `message`（页面上就这么显示） |
 | --- | --- | --- |
-| `no-sdk` | 云端 SDK 没加载出来（多半是没联网 / 被拦） | 「云端组件没加载成功……」 |
-| `no-client` | SDK 在，但连接没建起来 | 「云端连接没建起来……」 |
-| `query-failed` | 请求发出去了但没拿到结果 | 「这次没读到云端的内容……」 |
-| `empty` | 读回来了，但库里一条都没有 | 「云端库里现在一条内容都没有。这不算坏了 —— 是内容还没录进去。」 |
+| `no-sdk` | 云端 SDK 没加载出来（多半是没联网 / 被拦） | 「云端组件没加载成功 —— 可能是没联网，也可能网络被拦了。」 |
+| `no-client` | SDK 在，但连接没建起来 | 「云端连接没建起来 —— 多半是没联网。」 |
+| `query-failed` | 请求发出去了但没拿到结果 | 「这次没读到云端的内容 —— 可能没联网，也可能只是一时抽风。」 |
+| `empty` | 读回来了，但库里一条都没有 | 「云端还没有这份数据 —— 不是坏了，是还没录进来。」 |
+
+⚠️ 这四句和写接口的中文**同源**：都出自 `cloud.js` 的 `FAIL_TEXT`。
+读接口用小写 `reason`、写接口用大写 `code`，但说的是同一件事的会被
+`FAIL_ALIAS` 指到同一条 —— 保证「云端没连上」那几句话**只有一份**。
 
 ⚠️ **以上四种页面都只做一件事：如实说 + 给「重试」。绝不编内容顶上。**
 这一条是 PRD 硬约束 **C4** 的精神，跟「今日热点」读不到时的处理完全一样。
@@ -435,7 +445,7 @@ PostgREST 删一条**本来就不存在的**记录，返回的是「成功、删
 
 | 契约里的东西 | 落在哪（**Day 19 之后**） |
 | --- | --- |
-| 入参校验 + 中文提示 | `assets/cloud.js` → `validateEntry()`、`CODE_TEXT` |
+| 入参校验 + 中文提示 | `assets/cloud.js` → `validateEntry()`、`FAIL_TEXT`（**Day 23 由 `CODE_TEXT` 扩成这张总表**） |
 | 编排：先校验 → 再查重 → 再写入 → 再读回 | `assets/cloud.js` → `postEntry()` |
 | 数据库原始错误码 → 契约错误码（23505→`DUPLICATE` 等） | `assets/cloud.js` → `entryWriteFail()` / `entryPatchFail()` / `entryDeleteFail()` |
 | 生成主键（`u-YYYY-MM-DD-xxx`） | `assets/cloud.js` → `makeEntryId()` |
@@ -446,7 +456,7 @@ PostgREST 删一条**本来就不存在的**记录，返回的是「成功、删
 | **删一条 + 回查证明真的没了** | `assets/cloud.js` → `deleteEntry()` ← 调 `db.js` 的 `deleteContent()` ＋ 回查 `selectEntries()` |
 | **「查数据库」这件事本身**：等 SDK / 建连接 / 表名 / 列名 / 排序 / 条数 / `.insert()` / `.update()` / `.delete()` | **`assets/db.js`** → `selectHotTopics()` / `selectEntries()` / `selectSources()` / `selectEntryByTitle()` / `insertContent()` / `updateContent()` / `deleteContent()` |
 | **写失败时把「空数组」当成没写成**（契约 2.6 ②） | **`assets/db.js`** → `insertContent()` / `updateContent()` / `deleteContent()` 返回 `empty-result`，再由 `cloud.js` 翻成 `WRITE_FAILED` / `PATCH_FAILED` / `DELETE_FAILED` |
-| **读失败时的中文说法** | `assets/data.js` → `libraryFail`；`assets/app.js` → `failHint()` |
+| **读失败时的中文说法** | **`assets/cloud.js` → `FAIL_TEXT`**（`readFail()` 直接带上 `message`）；页面只画 `message`，**不再自己翻中文**（Day 23 前散在 `data.js` 的 `libraryFail` / `app.js` 的 `failHint()`，已删） |
 | **分组 + 云端字段还原** | `assets/app.js` → `buildColumns()`、`entryFromRow()`（**Day 22 补了 `id` / `sourceId` / `summary`**） |
 | **「N 天前」的时间换算** | `assets/rules.js` → `daysAgo()` |
 | 长度上限等常量 | `assets/config.js` → `entry` 段 |
