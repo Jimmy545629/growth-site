@@ -358,14 +358,26 @@
     if (!box) return;
     clear(box);
     add(box, h('span', { text: metaUpdatedText() }));
-    add(box, h('span', { class: 'entry-meta' }, h('span', { class: 'sep', text: '·' })));
+
+    /* 【Day 27 修】「·」这个分隔符原来是无条件挂上去的，后面跟着「示例内容」那块。
+       今天把那块摘掉（见 data.js 的 meta.isSample）之后，
+       顶上就剩一个**孤零零的「·」** —— 截图里一眼就看出来了。
+       → 改成：先收集这次要显示哪几条，**有一条才补分隔符**。
+         这样以后再关掉任何一条，都不会留下光秃秃的分隔符。 */
+    var flags = [];
     if (D.meta.isSample) {
-      add(box, h('span', { class: 'meta-flag', text: '示例内容（版面确认用，非真实收录）' }));
+      flags.push('示例内容（版面确认用，非真实收录）');
     }
     /* 万一记录存不住（浏览器禁用存储 / 隐私模式），必须当面说清楚，
        不能让人以为「我的打卡好好的存着」。 */
     if (!S.isPersistent()) {
-      add(box, h('span', { class: 'meta-flag', text: '这个浏览器不允许保存记录 · 本次打卡关掉页面就没了' }));
+      flags.push('这个浏览器不允许保存记录 · 本次打卡关掉页面就没了');
+    }
+    if (flags.length) {
+      add(box, h('span', { class: 'entry-meta' }, h('span', { class: 'sep', text: '·' })));
+      flags.forEach(function (t) {
+        add(box, h('span', { class: 'meta-flag', text: t }));
+      });
     }
     renderStreak();
   }
@@ -2317,13 +2329,18 @@
 
     var card = h('article', { class: 'daily-read-card', 'aria-label': T.kicker });
 
-    /* 卡头：标题 + 形态徽标 + 示例内容标记 */
+    /* 卡头：标题 + 形态徽标
+       【Day 27 改】这里原来还挂着一格「示例内容」小标 —— **删掉了**。
+       原因：那是内容全是占位稿时的标注；现在池子里 8 篇的出处都是真实可查的
+       书 / 公开演讲，那句话就变成了**假的** —— 按本项目的规矩，
+       假标注比没有标注更糟。
+       ⚠️ 那「这到底是不是原文转载」谁来交代？卡上本来就有两处，够了：
+         · 「来源：…」（下面那行 dr-origin）；
+         · 摘要前面那个「本站提炼」（dr-mine）。
+       整站性质由底部的 footer.note 统一说 —— 一处说清，不在这里重复第三遍。 */
     var head = h('div', { class: 'dr-head' });
     add(head, h('p', { class: 'dr-kicker', text: T.kicker }));
     add(head, h('span', { class: 'media-badge' }, R.mediaBadge(one)));
-    /* ⚠️ 「示例内容」这一格不能省：
-       现在池子里全是示例，不写这一句，看的人会以为已经是真实收录了。 */
-    add(head, h('span', { class: 'dr-sample', text: '示例内容' }));
     add(card, head);
 
     add(card, h('p', { class: 'dr-lead', text: T.lead }));
@@ -2398,7 +2415,8 @@
      ① 不许把读不到悄悄吞掉 —— 读不到就如实说，绝不编数据顶上（PRD C4）。
      ② 不许在这里直接写 fetch 或拼云端地址 —— 所有云端逻辑在 cloud.js，
         这个函数只管「把拿到的画出来」。
-     ③ 不许给它挂「示例内容」标记 —— 它是真实的，跟上面那些示例内容不是一回事；
+     ③ 不许给它挂「示例内容」标记 —— 它是从云端读来的真数据，
+        跟上面那些编辑内容不是一回事；
         但必须如实标出「哪一天的榜单」和「来源」，让人能自己去核对。 */
   /* limit 从哪来：地址里的 '?hot=N'（Day 17 余力加练）。
      没写就用 config.js 里那个默认条数；写坏了也回默认。 */

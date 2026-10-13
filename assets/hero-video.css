@@ -192,8 +192,8 @@ body {
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
-/* 带暖橙圆点的那个（「示例内容」）本来就有自己的样式，
-   别把它那个小圆点也包进药丸里，所以只垫底、不加内边距 */
+/* meta-flag 那个小圆点（::before 画的那个）本来就有自己的样式，
+   别把它也包进药丸里，所以只垫底、不加内边距 */
 .meta-flag {
   padding: 2px 10px 2px 8px;
 }
