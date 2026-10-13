@@ -81,10 +81,14 @@
            到这里已经是可信的；但函数本身仍然不假设它一定合法 ——
            外面的东西一律不当成「长得对」。
      出参：{ ok:true, rows:[…], date:'2026-10-03', updatedAt:'2026-10-06T22:50:11+08:00',
-             total:库内这一天共几条 }
+             total:过滤后这一天共几条, blocked:被词表挡掉几条 }
            { ok:false, reason:'no-sdk' | 'no-client' | 'query-failed' | 'empty', message:'…中文…' }
      ⚠️ updatedAt 是 Day 20 加的**新增字段**（原有字段一个没改），
-        见 docs/api-contract.md。老字段 date / total / rows 的含义都没动。 */
+        见 docs/api-contract.md。老字段 date / total / rows 的含义都没动。
+     ⚠️ blocked 是 Day 27 晚加的另一个新增字段；**同时 total 的含义变窄了**：
+        以前是「库里这一天共几条」，现在是「**过滤之后**这一天共几条」，
+        页面上的「共 N 条」跟着一起变。两个数都不是编的，但说的不是一回事，
+        所以 blocked 必须一起带出来（见下面那段注释）。 */
   function fetchHotTopics(limit) {
     var n = limit || C.hot.limit;
 
@@ -122,12 +126,34 @@
         if (!updatedAt || t > new Date(updatedAt).getTime()) updatedAt = s;
       });
 
+      /* 【Day 27 晚加】内容过滤（词表在 config.hot.blockWords，理由写在那儿）。
+         ⚠️ 为什么要**在这一层**滤，而不是等 app.js 画的时候再滤：
+         页面是按 limit 先取前 N 条再来画的。要是先取 8 条、画的时候滤掉 3 条，
+         榜上就只剩 5 条 —— 看着像缺了一块，而且实际展示数跟 limit 对不上。
+         在这里「先滤掉、再取前 N 条」，展示数才是满的。
+
+         ⚠️ 一个加载顺序上的坑，写下来免得以后有人踩：
+         rules.js 在 cloud.js **后面**才加载（见 index.html 的顺序），
+         所以这行**不能**写成文件开头那种 `var R = window.GROWTH_RULES`
+         —— 那时候它还不存在。放在这个回调里取就没事：
+         回调是异步跑的，那时所有脚本都加载完了。
+         ⚠️ 取不到就**不过滤**（宁可多留一条，也不要因为一个加载问题把整块清空）。 */
+      var R = window.GROWTH_RULES;
+      var passed = (R && R.filterHotRows)
+        ? R.filterHotRows(rows, C.hot.blockWords)
+        : { kept: rows, blocked: [] };
+
       return {
         ok: true,
-        rows: rows.slice(0, n),
+        rows: passed.kept.slice(0, n),
         date: latest,
         updatedAt: updatedAt,
-        total: rows.length
+        total: passed.kept.length,
+        /* 被词表挡掉的条数 —— 页面拿它如实说一句，不悄悄吞掉。
+           ⚠️ 注意 total 是**过滤之后**的数：页面上「共 N 条」说的一直是
+           「这一天有几条是本站会展示的」，跟库里那 30 条不是一回事，
+           所以必须把「略掉几条」也说出来，否则两个数对不上就是新的不实。 */
+        blocked: passed.blocked.length
       };
     }).catch(function (e) {
       return readFail('query-failed', e);

@@ -1052,14 +1052,14 @@
       libState = 'empty';
       renderLibrary(); renderLibraryDemo();
       /* 顶上那两处也跟着说「库里是空的」（它们是同一份数据的两个窗口） */
-      renderMeta(); renderStats();
+      renderMeta(); renderStats(); renderFoot();
       return Promise.resolve();
     }
     if (libMode === 'error') {
       /* 演示模式不进网络，所以没有接口给的 message —— 用列表状态那句通用兜底。 */
       libState = 'error'; libMessage = D.listStates.error.hint;
       renderLibrary(); renderLibraryDemo();
-      renderMeta(); renderStats();
+      renderMeta(); renderStats(); renderFoot();
       return Promise.resolve();
     }
 
@@ -1110,9 +1110,12 @@
          它们和列表看的是**同一份数据**；不重画，就会出现
          「卡片说 16 条、列表里数出来 15 条」这种自相矛盾。
          读失败时也会走到这儿（libState 已经是 error），那时它们显示的就该是
-         「读不到」，而不是继续挂着上一次的旧数字。 */
+         「读不到」，而不是继续挂着上一次的旧数字。
+         【Day 27 晚补第三处】底部那句「当前引用来源」也是**从这份数据现算**的
+         （原来写死了一份 5 本书的名单）→ 同一份数据，必须同一刻重画。 */
       renderMeta();
       renderStats();
+      renderFoot();
       renderLibrary();
       renderLibraryDemo();
     });
@@ -1465,6 +1468,15 @@
       media: r && r.media,
       dur: (r && r.dur) || '',
       origin: d.origin || src.name || '',
+      /* 【Day 27 晚加】来源表里的**原始**平台 + 名字，给底部「当前引用来源」现算用。
+         ⚠️ 跟上面那个 origin 不是一回事，别混：
+           · origin 是**这一条**的出处写法（「书籍《深度工作》· 卡尔·纽波特」），
+             带作者、还可能被 detail 覆盖 —— 它是给「这一条」看的；
+           · 这两个字段要的是**去重后的来源清单**，所以要的是来源表原名，
+             不能被某一条自己的写法污染。（Day 24 那个「节目名当人名」的坑，
+             根子就是拿来源表的字段去顶内容自己的字段 —— 这里反着来，各用各的。） */
+      srcName: src.name || '',
+      srcPlatform: src.platform || '',
       time: R.daysAgo(r && r.created_at)
     };
 
@@ -2509,10 +2521,24 @@
       return;
     }
 
+    /* 【Day 27 晚加】词表过滤之后**一条不剩**的情况。
+       罕见（词表被改坏、或当天榜单真的一条都不合适），但既然有可能，就得有个说法：
+       **不许画一张空榜单** —— 空列表看着就是「页面坏了」，
+       而真实原因是「有内容，但都被挡掉了」，这两件事必须说清楚。 */
+    if (!res.rows.length) {
+      var emptyCard = h('article', { class: 'hot-card', 'aria-label': T.title });
+      var emptyHead = h('div', { class: 'hot-head' });
+      add(emptyHead, h('h2', { class: 'hot-title', text: T.title }));
+      add(emptyHead, h('span', { class: 'hot-date', text: (T.dateLabel || '') + res.date }));
+      add(emptyCard, emptyHead);
+      add(emptyCard, h('p', { class: 'hot-fail-msg', text: T.allFiltered }));
+      add(box, emptyCard);
+      return;
+    }
+
     var card2 = h('article', { class: 'hot-card', 'aria-label': T.title });
     var head2 = h('div', { class: 'hot-head' });
     add(head2, h('h2', { class: 'hot-title', text: T.title }));
-
     /* ★ 关键的一行：如实标出这份数据是哪一天的榜单。
        为什么必须有：数据是从云端读的、一天一份快照，页面上不写日期，
        看的人就分不清「这是刚才的」还是「这是昨天的」。
@@ -2575,8 +2601,11 @@
     /* 底部：来源标注 + 一条「去核对」的出口。
        这是 PRD C4「每条内容都能核到原始出处」在热点这块的落实：
        来源写清楚（百度实时热搜），点任意一条能跳到原始搜索结果页。
-       ⚠️ 「共 N 条」说的是**库里这一天一共多少条**，不是「显示了几个」——
-       显示几个由上面那个「这次显示 N 条」的标记负责，两个数不能混。 */
+       ⚠️ 「共 N 条」说的是**这一天一共多少条**，不是「显示了几个」——
+       显示几个由上面那个「这次显示 N 条」的标记负责，两个数不能混。
+       【Day 27 晚】加了词表过滤之后，「共 N 条」的含义变窄成
+       「这一天有 N 条**是本站会展示的**」—— 所以被挡掉几条也必须一起说出来，
+       否则拿它跟百度原榜对照的人会以为数据缺了一块。 */
     var foot = h('p', { class: 'hot-src' });
     add(foot, h('span', { text: (T.srcLabel || '') + (res.rows[0] ? res.rows[0].source_name : '') }));
     add(foot, h('span', { class: 'sep', text: '·' }));
@@ -2587,6 +2616,12 @@
       add(foot, h('span', { class: 'sep', text: '·' }));
       add(foot, h('span', { text: (T.showLabel || '').replace('{n}', String(limit)) }));
     }
+    /* 【Day 27 晚加】被词表挡掉了几条，如实交代（只说条数，不列出是哪几条 ——
+       列出来等于把挡掉的内容又展示了一遍，那这个过滤就白做了）。 */
+    if (res.blocked > 0 && T.filteredNote) {
+      add(foot, h('span', { class: 'sep', text: '·' }));
+      add(foot, h('span', { class: 'hot-filtered', text: T.filteredNote.replace('{n}', String(res.blocked)) }));
+    }
     add(card2, foot);
 
     add(box, card2);
@@ -2595,12 +2630,48 @@
   /* ============================================================
      八、底部（三个视图共用）
      ============================================================ */
+  /* 底部「当前引用来源」这一句到底是哪几个字 —— **现算**（Day 27 晚改）。
+
+     为什么必须现算：这一句原来是把 5 本书**写死在 data.js 里**的。
+     库里的内容早就从 5 本变到 16 条、出处十几家了，那句就一直没跟上，
+     属于「页面上印着一个不是算出来的东西」—— 跟今天修掉的另外三处同一类毛病
+     （顶栏那句「今天 08:00」、统计卡那个「12 条」、首页那个「示例内容」）。
+
+     ⚠️ 算的是**去重后、页面这 16 条真的用到的来源**，用的是列表自己那份 libCache ——
+     不另建一份统计，不然两份一定会漂移（Day 27 那两处就是这么坏的）。
+     ⚠️ 读取中 / 读不到 / 库里空：各说各的话，**一律不拿上一次的名单顶上**。
+     否则「内容读不出来了」的那一屏上，来源那行还理直气壮列着一串名字 ——
+     那正是本项目最不想要的那种自相矛盾。 */
+  function footSourcesText() {
+    var F = D.footer || {};
+    if (libState === 'loading') return F.srcPending || '—';
+    if (libState === 'empty') return F.srcEmpty || '—';
+    if (libState === 'error') return F.srcUnknown || '—';
+
+    var seen = {};
+    var out = [];
+    (libCache || []).forEach(function (c) {
+      (c.items || []).forEach(function (it) {
+        var label = R.sourceLabel(it.srcPlatform, it.srcName);
+        if (!label || seen[label]) return;
+        seen[label] = 1;
+        out.push(label);
+      });
+    });
+    if (!out.length) return F.srcEmpty || '—';
+    /* 排序：同一个数据每次画出来顺序都一样（按中文排），
+       不依赖「先读到哪条」—— 那样刷新一下顺序就变，看着像内容在动。 */
+    out.sort(function (a, b) { return a.localeCompare(b, 'zh'); });
+    return out.join('、');
+  }
+
   function renderFoot() {
     var box = document.getElementById('foot');
     if (!box) return;
     clear(box);
     add(box, h('p', {}, h('strong', { text: '关于这份内容：' }), D.footer.note));
-    add(box, h('p', {}, h('strong', { text: '当前引用来源：' }), D.footer.sources.join('、')));
+    add(box, h('p', {}, h('strong', { text: D.footer.srcLabel || '当前引用来源：' }),
+      h('span', { id: 'foot-sources', text: footSourcesText() })));
     /* 「计划收录」单独一行、单独标出来 —— 不许跟上面那行混在一起，
        免得看的人以为页面上的内容已经出自这些账号了。 */
     if (D.footer.plan) {

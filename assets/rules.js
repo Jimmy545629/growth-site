@@ -531,6 +531,55 @@
     return a.toLowerCase() === b.toLowerCase();
   }
 
+  /* ============================================================
+     热点内容的过滤（Day 27 晚加）
+     ============================================================
+     纯函数：吃「一天的全部条目」＋「词表」，吐「留下的」和「滤掉的」。
+     ⚠️ 它**不碰云端、不碰页面、不读 config** —— 词表由调用方（cloud.js）
+     从 config 里取好再传进来。这样这个函数可以单独拿来验，不受别的改动影响。
+
+     ⚠️ **只匹配标题**（理由写在 config.js 的 blockWords 那段：连摘要一起匹配，
+     会把「标题干净、摘要里提到国务院」的民生政策内容误伤掉）。
+     ⚠️ 无论 title 是什么类型（null / 数字 / undefined）都当字符串比，
+     绝不假设外面来的数据长得对 —— 判不出来就是「不过滤」，宁可多留一条。 */
+  function filterHotRows(rows, words) {
+    var list = (words || []).filter(function (w) { return typeof w === 'string' && w; });
+    var kept = [];
+    var blocked = [];
+    (rows || []).forEach(function (r) {
+      var title = String((r && r.title) || '');
+      var hit = false;
+      for (var i = 0; i < list.length; i++) {
+        if (title.indexOf(list[i]) >= 0) { hit = true; break; }
+      }
+      if (hit) blocked.push(r); else kept.push(r);
+    });
+    return { kept: kept, blocked: blocked };
+  }
+
+  /* 把「来源的平台 + 名字」拼成页面上要显示的那串字。
+     例：('书籍', '《原子习惯》') → '书籍《原子习惯》'
+         ('公开访谈', '雷军访谈')  → '公开访谈 雷军访谈'（名字不是书名号开头时补一个空格）
+         ('读书笔记', '读书笔记')  → '读书笔记'（**平台和名字一样时只留一个**）
+     ⚠️ 为什么要那个空格：书名自带《》，贴着平台读是「书籍《原子习惯》」很顺；
+       可「公开访谈雷军访谈」就糊成一团了。这是排版细节，所以放在这个纯函数里，
+       页面那一层只管把结果摆上去。
+     ⚠️ 为什么平台等于名字时要留一个：来源表里「读书笔记」这类条目，
+       平台和名字填的是同一个词 —— 直接拼会印出「读书笔记 读书笔记」。
+       另外「公开演讲（未标注具体场次）」这种名字**本身就以平台开头**，
+       拼出来是「公开演讲 公开演讲（未标注具体场次）」—— 同样读着像出错。
+       → 所以判据是「**名字已经包含平台**就不再加平台」，两种情况一起盖住。
+       （Day 27 晚实测发现，两处都是在页面上看出来的。） */
+  function sourceLabel(platform, name) {
+    var p = String(platform === null || platform === undefined ? '' : platform).trim();
+    var n = String(name === null || name === undefined ? '' : name).trim();
+    if (!n) return p;
+    if (!p) return n;
+    if (n.indexOf(p) === 0) return n;
+    if (/^[《〈「【]/.test(n)) return p + n;
+    return p + ' ' + n;
+  }
+
   window.GROWTH_RULES = {
     dayKey: dayKey,
     fromKey: fromKey,
@@ -567,7 +616,10 @@
     /* Day 17 加：地址里的 hot=N 条数限制（余力加练那条） */
     hotLimitFromHash: hotLimitFromHash,
     /* Day 19 补 2 加：当前地址是不是正式网址（纯函数，见上面那条注释） */
-    isOfficialOrigin: isOfficialOrigin
+    isOfficialOrigin: isOfficialOrigin,
+    /* Day 27 晚加：热点内容过滤 ＋ 来源显示名拼装（都是纯函数） */
+    filterHotRows: filterHotRows,
+    sourceLabel: sourceLabel
   };
 
 })();

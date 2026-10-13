@@ -16,7 +16,7 @@
 
 | 编号 | 方法 | 函数名 | 作用 | 建在哪 | 建立于 |
 | --- | --- | --- | --- | --- | --- |
-| **01** | GET | `GROWTH_CLOUD.fetchHotTopics(limit)` | 读「当日热搜」那一份快照 | `assets/cloud.js` | Day 17（**Day 20 补 `updatedAt` 字段**，见一·二） |
+| **01** | GET | `GROWTH_CLOUD.fetchHotTopics(limit)` | 读「当日热搜」那一份快照（**Day 27 晚起会先按词表过滤**） | `assets/cloud.js` | Day 17（**Day 20 补 `updatedAt` 字段**、**Day 27 晚补 `blocked` 并收窄 `total`**，见一·二） |
 | **02** | POST | `GROWTH_CLOUD.postEntry(input)` | **新增一条内容**，写进云端 `contents` 表 | `assets/cloud.js` | **Day 18** |
 | **03** | GET | `GROWTH_CLOUD.fetchEntries()` | **读内容库三列的条目**（`contents` 表 `kind='entry'` ＋ 关联 `sources`） | `assets/cloud.js` | **Day 18** |
 | **04** | GET | `GROWTH_CLOUD.fetchSources()` | 读来源名单（「新增一条」下拉的选项） | `assets/cloud.js` | **Day 18** |
@@ -67,7 +67,8 @@ Day 17 建它的时候只承诺了三个字段；Day 20 首页要显示「最后
   "rows": [ /* 这一天要显示的那几条，已按 rank 升序、截到 limit */ ],
   "date": "2026-10-06",
   "updatedAt": "2026-10-06T22:57:31+08:00",
-  "total": 30
+  "total": 25,
+  "blocked": 5
 }
 ```
 
@@ -77,7 +78,25 @@ Day 17 建它的时候只承诺了三个字段；Day 20 首页要显示「最后
 | `rows` | 这一天要显示的那几条（已按 `rank` 排、截到 `limit`） |
 | `date` | 这份快照是**哪一天**的 → 页面「榜单日期」这一格 |
 | `updatedAt` | **Day 20 新增**。这份快照**什么时候抓进云端**的（云端那一行的 `fetched_at`，取这一份里**最晚**的那个时刻）→ 页面「最后更新」这一格 |
-| `total` | 库里这一天**一共**几条（**不**被 `limit` 截断，跟 `rows.length` 不是一回事） |
+| `total` | 这一天**过滤之后**一共几条（**不**被 `limit` 截断，跟 `rows.length` 不是一回事）。⚠️ **Day 27 晚含义变窄**，见下面那条说明 |
+| `blocked` | **Day 27 晚新增**。被词表（`config.hot.blockWords`）挡掉的条数 |
+
+⚠️ **`total` 的含义在 Day 27 晚变窄了 —— 这是本次唯一一处「老字段含义变了」**：
+
+| | Day 27 之前 | Day 27 晚之后 |
+| --- | --- | --- |
+| `total` 说的是 | 库里这一天**一共**几条（当天 30 条就是 30） | 这一天有 **N 条是本页会展示的**（滤掉 5 条就是 25） |
+
+**为什么要变**：`config.hot.blockWords` 加进来之后，页面按 limit 取数之前就会先滤掉一批
+（顺序很重要：**先滤、再取前 N 条** —— 反过来会让榜单缺一块，见 `cloud.js` 里那段注释）。
+于是「一共几条」这件事有了两个答案，必须说清是哪一个。
+
+**为什么必须同时新增 `blocked`**：不加的话，页面上「共 25 条」跟百度原榜的 30 条对不上，
+拿它去核对的人会以为**数据缺了一块**。说了「另有 5 条未展示」，
+两个数才闭合（25 ＋ 5 ＝ 30）。
+→ 这是本项目一贯那条：**同一个数字，只说一半就是新的不实**。
+
+⚠️ `blocked` 可能是 `0`（那天没有需要挡的），页面这时**不画那一句**，而不是印「另有 0 条」。
 
 ⚠️ **`date` 和 `updatedAt` 是两件事，都要有**：
 
