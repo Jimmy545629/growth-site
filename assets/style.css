@@ -742,6 +742,87 @@ body {
 }
 .action-progress b { color: var(--ok); font-size: var(--fs-3); }
 
+/* ---------- 内容库工具条：筛选 + 搜索（Day 27 加） ----------
+   位置：三列榜单**上面**。为什么放上面而不是下面 ——
+   它是「改怎么看」，不是「看完之后干什么」，放在下面会先被翻过去。 */
+
+.lib-tools {
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--card);
+  padding: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+
+/* 搜索框 */
+.lib-search { margin-bottom: var(--sp-3); }
+.lib-search-input {
+  width: 100%;
+  min-height: 36px;          /* 比 chip 再高一点：它是这一块的主入口 */
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--card-2);
+  color: var(--ink);
+  font-size: var(--fs-2);
+  font-family: inherit;
+}
+.lib-search-input::placeholder { color: var(--ink-faint); }
+.lib-search-input:focus { border-color: var(--brand); }
+
+/* 两组筛选项 */
+.lib-fgroups { display: flex; flex-direction: column; gap: var(--sp-2); }
+.lib-fgroup { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.lib-flabel {
+  flex: none;
+  min-width: 2.5em;
+  font-size: var(--fs-4);
+  color: var(--ink-faint);
+}
+
+.lib-chip {
+  min-height: 28px;
+  padding: 0 var(--sp-3);
+  /* 胶囊形：一眼看出是「筛选项」，不是「提交按钮」 */
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card-2);
+  color: var(--ink-faint);
+  font-size: var(--fs-4);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.lib-chip:hover { color: var(--ink); border-color: rgba(255,255,255,.16); }
+/* 选中的那个必须一眼看得出来 —— 否则用户不知道自己正处在一个「筛过的视图」里，
+   会以为内容库本来就只有这么几条。 */
+.lib-chip.is-on {
+  background: rgba(76,141,255,.16);
+  border-color: rgba(76,141,255,.42);
+  color: #9dc0ff;
+  font-weight: 700;
+}
+
+/* 状态行：现在筛出几条 + 一键清空 */
+.lib-tstatus {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-4);
+  color: var(--ink-faint);
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+}
+.lib-clear {
+  min-height: 28px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--fs-4);
+  font-family: inherit;
+  cursor: pointer;
+}
+.lib-clear:hover { border-color: rgba(255,255,255,.18); }
+
 /* ---------- 三列榜单 ---------- */
 .columns {
   display: grid;

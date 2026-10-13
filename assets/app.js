@@ -267,13 +267,21 @@
       renderActions();
       renderDailyRead();   /* Day 15：今日一篇 */
       renderHot();         /* Day 17：今日热点（真实热搜，从云端读） */
+      /* 【Day 27 加】首页这张「内容库收录」卡和顶栏那句「内容更新于 X」，
+         都要用内容库的真实数据。内容库平时只在「内容库」页才读 ——
+         首页不主动读它的话，这两处就只能靠写死的数字，那正是今天要修的病。 */
+      ensureLibraryCount();
     } else if (id === 'library') {
       renderLibraryHead();
       renderLibraryDemo();
       loadLibrary();
-      renderLibraryAdd();
-      /* 来源列表只在「没读到」时才重读 —— 已经读到了就不必每次切进来再请求一遍。 */
-      if (!entrySources || !entrySources.length) loadEntrySources();
+      /* ⚠️ Day 27 路线A：页面写入口整体关掉时，这块表单和 sources 都不必碰 ——
+         既不用画，也不用为它多请求一次。开关与理由见 config.js 的 entry.pageWrite。 */
+      if (C.entry.pageWrite) {
+        renderLibraryAdd();
+        /* 来源列表只在「没读到」时才重读 —— 已经读到了就不必每次切进来再请求一遍。 */
+        if (!entrySources || !entrySources.length) loadEntrySources();
+      }
     } else if (id === 'me') {
       renderMeHead();
       renderMeFavorites();
@@ -320,6 +328,28 @@
     enterView(id);
   }
 
+  /* 顶上那句「内容更新于 X」（Day 27 修）。
+     ⚠️ X **不是写死的**，它 = 内容库**最新一条**是多久以前（loadLibrary 读回来后填的
+     libNewest）。三种情况各有各的说法，而且**一律说实话**：
+       · 已经读到内容库 → 内容更新于 今天 / 昨天 / N 天前
+       · 正在读         → 正在读取内容更新时间…
+       · 读不到 / 库里空 → 明说读不到 / 还没有内容
+     ★ 绝不拿一个旧值顶上 —— 这正是今天要修的病：页面天天说「今天 08:00 更新」，
+       其实内容停在 10-07。宁可说「暂时读不到」，也不编一个时间。 */
+  function metaUpdatedText() {
+    var M = D.meta || {};
+    var tpl = M.updatedTpl || '{when}';
+    /* ⚠️ 顺序有意这么排：**先说当下这一次读的结果，再提上次读到的值**。
+       一开始我写反了 —— 先看 libNewest，结果「读失败」时这句话还挂着上一次的
+       「内容更新于 今天」，而旁边那张卡已经老实说了「暂时读不到」。
+       同一份数据、同一屏里两种说法，正是这个项目一直在防的事。 */
+    if (libState === 'loading') return M.updatedPending || tpl.replace('{when}', '—');
+    if (libState === 'error') return M.updatedUnknown || tpl.replace('{when}', '—');
+    if (libState === 'empty') return M.updatedEmpty || tpl.replace('{when}', '—');
+    if (libNewest) return tpl.replace('{when}', libNewest);
+    return M.updatedUnknown || tpl.replace('{when}', '—');
+  }
+
   /* ============================================================
      二、顶部：元信息行（三个视图共用）
      ============================================================ */
@@ -327,7 +357,7 @@
     var box = document.getElementById('meta-row');
     if (!box) return;
     clear(box);
-    add(box, h('span', { text: '内容更新于 ' + D.meta.updated }));
+    add(box, h('span', { text: metaUpdatedText() }));
     add(box, h('span', { class: 'entry-meta' }, h('span', { class: 'sep', text: '·' })));
     if (D.meta.isSample) {
       add(box, h('span', { class: 'meta-flag', text: '示例内容（版面确认用，非真实收录）' }));
@@ -455,8 +485,13 @@
     var accents = ['var(--brand)', 'var(--warm)', 'var(--ok)'];
 
     D.stats.forEach(function (s, i) {
-      /* 标了 from:'actions' 的那一张，用现算的值，而不是 data.js 里写的 */
-      var v = s.from === 'actions' ? actionStat() : s;
+      /* 标了 from:'…' 的那几张，值都**当场算**，不用 data.js 里写的字面量。
+         ⚠️ 两张现算的卡看的是**两份不同的数据**，别弄混：
+           from:'actions' → 本机打卡记录（今天做完几项）
+           from:'library' → 云端内容库（一共收录多少条、三列各多少条） */
+      var v = s.from === 'actions' ? actionStat()
+            : s.from === 'library' ? libraryStat()
+            : s;
       var card = h('article', { class: 'stat', style: { '--accent': accents[i % accents.length] } });
       add(card, h('p', { class: 'stat-label', text: s.label }));
       add(card, h('p', { class: 'stat-value' },
@@ -465,6 +500,43 @@
       add(card, h('p', { class: 'stat-note', text: v.note }));
       add(box, card);
     });
+  }
+
+  /* 「内容库收录」那张统计卡的值（Day 27 修）。
+     ★ 为什么必须现算：原来这张卡在 data.js 里写死成「12 条 · 语录 5 · 访谈 3 · 政策 4」，
+       而库里当时已经是 16 条 —— 页面上印着一个编出来的数字（AGENTS 第 4 条第 9 项）。
+     ★ 它跟内容库列表用的是**同一个 libCache**，所以两处永远是同一个数：
+       卡片说 16 条，列表里就一定能数出 16 条，不会自相矛盾。
+     三种状态都要说人话（跟内容库列表那四种状态一个道理）：
+       读取中 → 「读取中」；读不到 → 「—」＋一句明说；读到了 → 真实条数 ＋ 三列各多少。 */
+  function libraryStat() {
+    var T = D.libraryStat || {};
+
+    if (libState === 'loading') {
+      return { value: T.loadingValue, unit: '', note: T.loadingNote };
+    }
+    if (libState === 'error') {
+      /* ⚠️ 这里**不拿上一次的数字顶上** —— 读不到就说读不到。 */
+      return { value: T.failValue, unit: '', note: T.failNote };
+    }
+
+    /* 读到过（ready 或 empty）：老老实实数一遍。
+       ⚠️ 空库也要画「0 条」，那是个真实的数字；画成「—」反而像出错了。 */
+    var total = 0;
+    var parts = [];
+    (libCache || []).forEach(function (c) {
+      var n = (c.items || []).length;
+      total += n;
+      parts.push(c.title + ' ' + n);
+    });
+
+    return {
+      value: String(total),
+      unit: T.unit,
+      /* 三列的条数各是多少 —— 其实就是「三列并排」那句话的数字版，
+         看卡就知道库里的内容大致长在哪一列。 */
+      note: parts.join(T.noteJoin)
+    };
   }
 
   /* ============================================================
@@ -933,6 +1005,23 @@
   var libCache = [];           /* 上一次成功读回来的三栏（演示区要用它画「正常」那一格） */
   var libReqId = 0;            /* 请求序号：只认最后一次发出的那次 */
 
+  /* 【Day 27 修】下面两个是给**首页**那两处用的，都跟着内容库的数据走：
+     · libLoaded —— 有没有**成功**读到过（判断首页要不要补读一次）。
+       ⚠️ 不能用 libCache 当判据：它的初值是 []，空数组在 JS 里是**真值**，
+         拿它当「有没有读过」会永远为真，首页就一次都不会去读。
+     · libNewest —— 最新一条是「多久以前」（顶栏那句「内容更新于 X」要用），
+       由 loadLibrary() 读回来后填，跟内容库里每条下面那个时间是同一个来源。 */
+  var libLoaded = false;
+  var libNewest = '';
+
+  /* 工具条的状态（Day 27 加）：筛选项 + 搜索词。
+     ⚠️ 只活在内存里，**不落 localStorage** —— 这是「当下这一眼怎么看」，
+     不是「我的记录」。存起来反而会出吓人的情况：昨天筛成「视频」，
+     今天打开内容库看着是空的，还以为内容丢了。
+     刷新回到「全部」，是符合直觉的。 */
+  var libFilter = { media: 'all', source: 'all' };
+  var libQuery = '';
+
   /* 去读内容。三种模式：
        'ok'    → 真的去云端读（默认，也是唯一的产品路径）
        'empty' → 演示「一条都没有」（不进网络）
@@ -947,16 +1036,18 @@
   function loadLibrary() {
     libState = 'loading';
     renderLibrary();
-
     if (libMode === 'empty') {
       libState = 'empty';
       renderLibrary(); renderLibraryDemo();
+      /* 顶上那两处也跟着说「库里是空的」（它们是同一份数据的两个窗口） */
+      renderMeta(); renderStats();
       return Promise.resolve();
     }
     if (libMode === 'error') {
       /* 演示模式不进网络，所以没有接口给的 message —— 用列表状态那句通用兜底。 */
       libState = 'error'; libMessage = D.listStates.error.hint;
       renderLibrary(); renderLibraryDemo();
+      renderMeta(); renderStats();
       return Promise.resolve();
     }
 
@@ -972,6 +1063,13 @@
         var total = 0;
         libCache.forEach(function (c) { total += c.items.length; });
         libState = total ? 'ready' : 'empty';
+        libLoaded = true;
+        /* 【Day 27 修】顺手记下**最新一条是多久以前**，给顶上那句「内容更新于 X」用。
+           selectEntries() 是按 created_at **倒着**取的，所以第一行就是最新那一条；
+           再用 rules.js 的 daysAgo() 说成「今天 / 昨天 / N 天前」——
+           跟内容库里每条下面那个时间**同一个来源**，页面上不会出现两种说法。 */
+        libNewest = (res.rows && res.rows.length)
+          ? R.daysAgo(res.rows[0].created_at) : '';
       } else {
         libState = 'error';
         /* ⚠️ 中文提示**直接取接口给的那句**（cloud.js 的 FAIL_TEXT），页面不另写一句。
@@ -979,19 +1077,56 @@
            「同一个原因好几种说法」的来源。 */
         libMessage = (res && res.message) || D.listStates.error.hint;
       }
-      renderLibrary();
-      renderLibraryDemo();
     }).catch(function () {
+      /* 这个 catch 只兜「读」这一步的异常。 */
       if (id !== libReqId) return;
       libState = 'error'; libMessage = D.listStates.error.hint;
-      renderLibrary(); renderLibraryDemo();
+    }).then(function () {
+      /* 【Day 27 改】渲染挪到**单独的** then 里，而且这一环**后面不再挂 catch**。
+
+         ⚠️ 为什么必须这么改（当天实测踩到的，值得记住）：
+         原来渲染也在这个 then 里面、后面紧跟着那个 catch —— 于是**渲染阶段抛的
+         任何异常都会被吞掉**，然后统一显示成「内容没读出来」。
+         结果是：数据明明已经读回来了、好端端躺在 libCache 里，
+         页面却指着「网络/数据」说问题在那儿。**报错指向的方向完全是错的**，
+         比不报错还难查。
+         → 分开之后：读失败才说读失败；渲染真出错，就像别的错误一样
+           直接抛到控制台，不伪装成数据问题。 */
+      if (id !== libReqId) return;
+      /* 【Day 27 修】内容库的数据变了，**顶上这两处必须跟着重画**：
+         「内容更新于 X」（元信息行）和首页那张「内容库收录」统计卡 ——
+         它们和列表看的是**同一份数据**；不重画，就会出现
+         「卡片说 16 条、列表里数出来 15 条」这种自相矛盾。
+         读失败时也会走到这儿（libState 已经是 error），那时它们显示的就该是
+         「读不到」，而不是继续挂着上一次的旧数字。 */
+      renderMeta();
+      renderStats();
+      renderLibrary();
+      renderLibraryDemo();
     });
+  }
+
+  /* 【Day 27 加】首页进来时，补读一次内容库 —— 只为了顶上那两处
+     （「内容更新于 X」＋「内容库收录 N 条」）。
+     ⚠️ 为什么需要它：内容库的数据原来**只有**进「内容库」页才读，
+     首页从来不读；于是首页那两处只能写死，写死了就一定会过期（今天修的就是这个）。
+     ⚠️ 为什么只读一次：已经成功读到过（libLoaded）就不再请求 ——
+     每次回首页都发一遍，纯属白费流量。读**失败**时不设这个旗子，
+     所以下次回首页会自动再试一次，不用用户去找「重试」按钮。 */
+  function ensureLibraryCount() {
+    if (libLoaded) return;
+    loadLibrary();
   }
 
   function renderLibrary() {
     var box = document.getElementById('library-list');
     if (!box) return;
     clear(box);
+
+    /* 工具条和列表是**两个容器**：每画一次列表都先把工具条清掉，
+       只有「读成功」那条路会在最后把它重新画出来 ——
+       加载中 / 出错 / 空库时它不该在（没有内容可筛，摆着也是空的）。 */
+    clearLibraryToolbar();
 
     if (libState === 'loading') {
       /* 加载中也把三列的**标题**画出来，只把列表部分换成骨架 ——
@@ -1013,7 +1148,232 @@
       add(box, renderColumns(emptyColumns()));
       return;
     }
-    add(box, renderColumns(libCache));
+
+    /* 【Day 27 改】读成功之后：先画工具条（筛选 + 搜索），再画筛过的三列。
+       ⚠️ 为什么这两件事不挤在一个函数里、不共用一个容器：
+       搜索时每敲一个字都要重画列表，但**不能连输入框一起重画** ——
+       重画一次输入框就被重建，焦点丢了，打到第二个字得重新点一下。
+       所以拆开：工具条画一次，列表随时重画。 */
+    renderLibraryReady();
+  }
+
+  /* ============================================================
+     内容库的工具条（Day 27 加）：甲 = 筛选，乙 = 搜索
+     ============================================================
+
+     由来见 config.js 的 libraryTools。一句话：
+     第三方试用唯一被点名的卡点是「找不到搜索」，而他真正要的是
+     「我想找某一类内容，现在只能一列一列翻」。 */
+
+  function clearLibraryToolbar() {
+    var bar = document.getElementById('library-toolbar');
+    if (bar) clear(bar);
+  }
+
+  /* 读成功时走这一条：画工具条 + 画（筛过的）三列 */
+  function renderLibraryReady() {
+    renderLibraryToolbar(libCache);
+    drawLibraryList();
+  }
+
+  /* 从已经读回来的三栏里，汇总出**实际出现过的**形态和来源。
+     ⚠️ 只列真的有条目的那些，不把 config 里 4 种形态全摆出来 ——
+       点下去什么也没有的按钮，比没有这个按钮更让人困惑（老规矩：不留空壳）。 */
+  function libFacets(cols) {
+    var medias = [];
+    var sources = [];
+    (cols || []).forEach(function (col) {
+      (col.items || []).forEach(function (it) {
+        var m = String(it.media || '');
+        if (m && medias.indexOf(m) < 0) medias.push(m);
+        var s = String(it.origin || '');
+        if (s && sources.indexOf(s) < 0) sources.push(s);
+      });
+    });
+    /* 形态按 config 里的**固定顺序**排，不按出现次数 ——
+       顺序固定，第二次来才不用重新找一遍。 */
+    var order = Object.keys(C.media || {});
+    medias.sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); });
+    sources.sort();
+    return { medias: medias, sources: sources };
+  }
+
+  function libMediaLabel(key) {
+    var def = (C.media && C.media[key]) || null;
+    return def ? def.label : key;
+  }
+
+  /* 把三栏按当前条件过一遍。
+     ⚠️ 为什么要同时返回 rawTotal：要把「这个库本来就没内容」
+     和「条件把结果筛空了」分开 —— 这两件事在页面上必须长得不一样，
+     否则用户会以为内容丢了。 */
+  function filterColumns(cols) {
+    var T = C.libraryTools || {};
+    var q = T.search ? libQuery.replace(/^\s+|\s+$/g, '').toLowerCase() : '';
+    var media = T.filter ? libFilter.media : 'all';
+    var source = T.filter ? libFilter.source : 'all';
+
+    var total = 0, rawTotal = 0;
+    var out = (cols || []).map(function (col) {
+      rawTotal += col.items.length;
+      var items = col.items.filter(function (it) {
+        if (media !== 'all' && String(it.media || '') !== media) return false;
+        if (source !== 'all' && String(it.origin || '') !== source) return false;
+        if (!q) return true;
+        /*搜哪些字段：标题、摘要、标签、来源、人物 ——
+          这几样是「用户记得住、也说得出口」的信息。
+          **不搜 detail 里那些更细的正文**：那样会出现
+          「这条明明没有这几个字，怎么也冒出来了」，比搜不到更让人不信任。 */
+        var hay = [it.title, it.summary, it.note, it.view, it.conclusion,
+                   it.tag, it.origin, it.person, it.role]
+          .filter(function (v) { return !!v; }).join(' ').toLowerCase();
+        return hay.indexOf(q) >= 0;
+      });
+      total += items.length;
+      return { key: col.key, title: col.title, note: col.note, accent: col.accent, items: items };
+    });
+    return { cols: out, total: total, rawTotal: rawTotal };
+  }
+
+  /* 只重画列表。
+     搜索框每敲一个字走的就是这条路 —— 工具条不动，输入焦点就不丢。 */
+  function drawLibraryList() {
+    var box = document.getElementById('library-list');
+    if (!box) return;
+    clear(box);
+
+    var r = filterColumns(libCache);
+    updateLibraryToolbarStatus(r);
+
+    /* 库里有内容、但条件把结果筛空了 → 说清是「筛没了」，不是「没有内容」 */
+    if (r.rawTotal > 0 && r.total === 0) {
+      add(box, ListState('empty', {
+        title: D.libraryTools.noMatchTitle,
+        hint: D.libraryTools.noMatchHint,
+        actionLabel: D.libraryTools.clearAction,
+        onAction: clearLibraryConditions
+      }));
+      return;
+    }
+    add(box, renderColumns(r.cols, { filtered: r.total !== r.rawTotal }));
+  }
+
+  /* 一键回到「全部」。两处都用它：空结果那块的大按钮、状态行右边那个小按钮。 */
+  function clearLibraryConditions() {
+    libFilter = { media: 'all', source: 'all' };
+    libQuery = '';
+    renderLibraryReady();
+  }
+
+  /* 一个 chip（可点的筛选按钮）。
+     ⚠️ 用 <button> 而不是 <span>：键盘能 Tab 到、读屏软件能念出来，
+       而且不用自己处理回车和空格键。 */
+  function libChip(label, on, onClick) {
+    var b = h('button', {
+      class: 'lib-chip' + (on ? ' is-on' : ''), type: 'button',
+      'aria-pressed': on ? 'true' : 'false', text: label
+    });
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function renderLibraryToolbar(cols) {
+    /* ⚠️ 这里必须分清两个东西，Day 27 实测就是因为把它俩混了、白跑一轮：
+         SW = config.libraryTools（**开关和上限**：filter / search / searchMax）
+         T  = data.libraryTools（**页面上印的字**：占位符、标签、状态行文案）
+       混用的后果很典型：开关全是 true（看着一切正常），但所有文字都是 undefined，
+       而 h() 会把 undefined **悄悄跳过** —— 于是画出一排**没有字的按钮**，
+       既不报错、也不明显，只有盯着看才发现「怎么按钮是空的」。
+
+       ★ 顺便记下它暴露的另一个更值钱的问题：这个异常被 loadLibrary 里那个
+         .catch 吞掉了，页面显示成「内容没读出来」—— 而数据其实早就读回来了。
+         报错指向的方向完全是错的。那个 catch 当天一并修了（见 loadLibrary）。 */
+    var SW = C.libraryTools || {};
+    var T = D.libraryTools || {};
+    var bar = document.getElementById('library-toolbar');
+    if (!bar) return;
+    clear(bar);
+    if (!SW.filter && !SW.search) return;
+
+    var wrap = h('div', { class: 'lib-tools' });
+
+    /* ---------- 乙：搜索框 ---------- */
+    if (SW.search) {
+      var input = h('input', {
+        class: 'lib-search-input', type: 'search', id: 'lib-q',
+        maxlength: String(SW.searchMax || 30),
+        placeholder: T.searchPlaceholder, 'aria-label': T.searchAria
+      });
+      input.value = libQuery;   /* 输入框的值要用 .value 设，不是属性 */
+      input.addEventListener('input', function () {
+        libQuery = input.value || '';
+        drawLibraryList();      /* 只重画列表，工具条不动 —— 焦点才留得住 */
+      });
+      add(wrap, h('div', { class: 'lib-search' }, input));
+    }
+
+    /* ---------- 甲：两组 chip（形态 / 来源） ---------- */
+    if (SW.filter) {
+      var f = libFacets(cols);
+      var groups = h('div', { class: 'lib-fgroups' });
+
+      var gMedia = h('div', { class: 'lib-fgroup' });
+      add(gMedia, h('span', { class: 'lib-flabel', text: T.mediaLabel }));
+      add(gMedia, libChip(T.allLabel, libFilter.media === 'all', function () {
+        libFilter.media = 'all'; renderLibraryReady();
+      }));
+      f.medias.forEach(function (m) {
+        add(gMedia, libChip(libMediaLabel(m), libFilter.media === m, function () {
+          libFilter.media = m; renderLibraryReady();
+        }));
+      });
+      add(groups, gMedia);
+
+      /* 来源这一组只在有两个以上来源时才画 ——
+         只有一个来源的话，那一排按钮就等于「全部」，纯属占地方。 */
+      if (f.sources.length > 1) {
+        var gSrc = h('div', { class: 'lib-fgroup' });
+        add(gSrc, h('span', { class: 'lib-flabel', text: T.sourceLabel }));
+        add(gSrc, libChip(T.allLabel, libFilter.source === 'all', function () {
+          libFilter.source = 'all'; renderLibraryReady();
+        }));
+        f.sources.forEach(function (s) {
+          add(gSrc, libChip(s, libFilter.source === s, function () {
+            libFilter.source = s; renderLibraryReady();
+          }));
+        });
+        add(groups, gSrc);
+      }
+
+      add(wrap, groups);
+    }
+
+    /* ---------- 状态行：现在筛出几条 + 一键清空 ---------- */
+    add(wrap, h('p', { class: 'lib-tstatus', id: 'lib-tstatus' }));
+    add(bar, wrap);
+
+    updateLibraryToolbarStatus(filterColumns(cols));
+  }
+
+  function updateLibraryToolbarStatus(r) {
+    var box = document.getElementById('lib-tstatus');
+    if (!box) return;
+    /* ⚠️ 这里是 **D**（文案），不是 **C**（配置）——
+       取错的那个版本会把 undefined.replace 抛出来，见上面 renderLibraryToolbar 的说明。 */
+    var T = D.libraryTools || {};
+    clear(box);
+
+    var untouched = (libFilter.media === 'all' && libFilter.source === 'all' && !libQuery);
+    if (untouched) {
+      add(box, h('span', { text: T.count.replace('{n}', String(r.rawTotal)) }));
+      return;
+    }
+    add(box, h('span', {
+      text: T.countFiltered.replace('{n}', String(r.total)).replace('{total}', String(r.rawTotal))
+    }));
+    var clr = h('button', { class: 'lib-clear', type: 'button', text: T.clearAction });
+    clr.addEventListener('click', clearLibraryConditions);
+    add(box, clr);
   }
 
   /* 【Day 23 删掉了 failHint()】
@@ -1144,6 +1504,13 @@
     if (!box) return;
     clear(box);
 
+    /* 【Day 27】开发演示区的总开关（见 config.developer.libraryStateDemo）。
+       关着的时候：上面那句 clear 已经把容器清空了，这里直接返回 ——
+       页面上不留任何痕迹，**也不去读/不去建**那一堆东西。
+       ⚠️ 注意返回的位置在 clear 之后：万一以后有人把这行开关动态打开，
+       重新调一次这个函数就能画出来，不需要额外的清理逻辑。 */
+    if (!(C.developer && C.developer.libraryStateDemo)) return;
+
     var wrap = h('section', { class: 'demo' });
     add(wrap, h('div', { class: 'demo-head' },
       h('h3', { class: 'demo-title', text: '四种状态对照' }),
@@ -1252,6 +1619,13 @@
         /* 还在读：画骨架。这条路径**必须有** ——
            否则「加载中」看起来就是「这一栏是空的」，两件事会被看成一件。 */
         add(sec, ListState('loading', { rowsNum: 3 }));
+      } else if (o.filtered) {
+        /* 【Day 27】筛完这一列空了。
+           ⚠️ 跟「这一列本来就没收录」是**两件事**，说法必须不一样 ——
+           沿用默认那句「还没有收录内容」，用户会以为内容没了。 */
+        add(sec, ListState('empty', {
+          title: D.libraryTools.colEmptyTitle, hint: D.libraryTools.colEmptyHint
+        }));
       } else {
         /* 这一列没有内容 → 走空状态，而不是留一片空白 */
         add(sec, ListState('empty', {}));
@@ -1341,8 +1715,13 @@
        ⚠️ 只给**真的从云端读回来的、有 id 的**条目画这两个按钮。
        本地写死在 data.js 里的那些（十二三条）没有 id ——
        它们不在云端、也不该被页面动，画个按钮点下去必然失败，
-       不如干脆不画（「不许留空壳」的老规矩）。 */
-    if (it.id) {
+       不如干脆不画（「不许留空壳」的老规矩）。
+
+       ⚠️ Day 27 路线A：**页面写入口关掉时，这两个按钮也不画。**
+       云端那两道具（GRANT + RLS 写策略）已经收回了，画出来点了也必然失败；
+       而且它们正是「访客能删光内容库」的那个入口本身。
+       开关与理由见 config.js 的 entry.pageWrite。 */
+    if (it.id && C.entry.pageWrite) {
       var ops = h('div', { class: 'entry-ops' });
 
       var edit = h('button', {
@@ -1610,6 +1989,11 @@
   }
 
   function renderLibraryAdd() {
+    /* ⚠️ Day 27 路线A：开关关着就直接返回。
+       #library-add 那个 div 于是始终是空的，页面上看不出这里曾经有块表单。
+       路由那边已经不再调用它了，这里是第二道保险 —— 万一以后有别的地方
+       直接调它，也不会偷偷把写入口画出来。开关见 config.js 的 entry.pageWrite。 */
+    if (!C.entry.pageWrite) return;
     var box = document.getElementById('library-add');
     if (!box) return;
     var T = D.libraryAdd;
@@ -2026,6 +2410,17 @@
     var box = document.getElementById('hot');
     if (!box) return;
     clear(box);
+
+    /* 【Day 27】今日热点板块的总开关（理由见 config.hot.visible）。
+       关着的时候：整块不画，**也不去云端读它** ——
+       少一次请求，而且不会在页面上留下任何「这里本来有东西」的痕迹。
+       ⚠️ 用 hidden 而不是把节点删掉：index.html 里那个 <section> 是
+       路由/布局的一部分，删了以后想开回来还得改两处。 */
+    if (!C.hot.visible) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
 
     var T = (D.hot || {});
     var n = hotLimit();

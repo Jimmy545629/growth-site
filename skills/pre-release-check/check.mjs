@@ -379,12 +379,17 @@ function checkB1() {
   else record('B1', 'B', '无 <script type="module">', 'PASS', 'index.html 里没有模块脚本');
 }
 
-/* B2 —— 不许出现「白名单外」的在线资源。
-   ⚠️ 唯一的例外是云端 SDK 那一个 CDN（Day 17 加的，见 index.html 注释）：
-   纯静态 + 零构建，所以 SDK 用 CDN 引，不用 npm 包（引 npm 就要多加一步构建）。
-   这个例外是**刻意**的，不是漏网 —— 所以检查项要把它写进白名单，
-   而不是照文档一刀切（那样会对一个正常的项目报红，属于误报）。 */
-const CDN_WHITELIST = /^https:\/\/cdn\.jsdelivr\.net\/npm\/@tencent-ai\/workbuddy-cloud-sdk@/;
+/* B2 —— 不许出现任何在线资源（AGENTS.md 第 4 条第 2 项：断网必须能用）。
+   ⚠️⚠️ Day 27 改：**白名单空了，从今天起不接受任何例外。**
+   原来这里放行过唯一一个例外 —— 云端 SDK 的 jsdelivr CDN（Day 17 加）。
+   但 Day 27 实测发现 jsdelivr 在国内**直连不通**（HTTP 000，走本机代理也 000，
+   DNS 能解析但 TCP 连不上），结果是「今日热点」和「内容库」**整块显示「没读到」**。
+   于是 SDK 改成本地文件 `assets/workbuddy-cloud-sdk.js`（66 KB，见 index.html 注释）。
+   → 白名单不再需要：页面**一个在线资源都不依赖**。
+   （变量留着，是为了万一将来又出现「刻意例外」时有个显眼的落脚点；
+   现在它恒为 null，等于「谁都不放行」。）
+   ⭐ 这一课值得记住：**当年那个「刻意例外」，正是今天这个 bug 的来源。** */
+const CDN_WHITELIST = null;   /* Day 27 起：没有任何例外 */
 
 function checkB2() {
   const hits = [];
@@ -396,7 +401,7 @@ function checkB2() {
     const re = /(?:src|href|poster)\s*=\s*["'](https?:\/\/[^"']+)["']/g;
     let m;
     while ((m = re.exec(l))) {
-      if (CDN_WHITELIST.test(m[1])) continue;
+      if (CDN_WHITELIST && CDN_WHITELIST.test(m[1])) continue;
       hits.push({ file: 'index.html', line: i + 1, what: '外部资源', text: m[1] });
     }
   });
@@ -407,18 +412,18 @@ function checkB2() {
       const re = /(?:url\(\s*["']?|@import\s+["'])(https?:\/\/[^)"']+)/g;
       let m;
       while ((m = re.exec(l))) {
-        if (CDN_WHITELIST.test(m[1])) continue;
+        if (CDN_WHITELIST && CDN_WHITELIST.test(m[1])) continue;
         hits.push({ file: f, line: i + 1, what: 'CSS 外链', text: m[1] });
       }
     });
   }
 
   if (hits.length) {
-    record('B2', 'B', '无白名单外的在线资源', 'FAIL',
-      `${hits.length} 处（白名单只有云端 SDK 那一个 CDN）`, hits);
+    record('B2', 'B', '无在线资源', 'FAIL',
+      `${hits.length} 处（Day 27 起不接受任何在线资源）`, hits);
   } else {
-    record('B2', 'B', '无白名单外的在线资源', 'PASS',
-      '页面只依赖本地文件 + 1 个白名单 CDN（云端 SDK，Day 17 刻意引入）');
+    record('B2', 'B', '无在线资源', 'PASS',
+      '页面不依赖任何在线资源（脚本 / 样式 / 图标全部是本地文件）');
   }
 }
 
@@ -487,8 +492,11 @@ function checkB6() {
   }
 }
 
-/* B7 —— 脚本加载顺序。后面每个文件一加载就用前面那个，顺序换了就白屏。 */
-const EXPECTED_ORDER = ['config.js', 'db.js', 'cloud.js', 'rules.js', 'store.js', 'data.js', 'app.js'];
+/* B7 —— 脚本加载顺序。后面每个文件一加载就用前面那个，顺序换了就白屏。
+   ⚠️ Day 27 改：最前面多了 `workbuddy-cloud-sdk.js`。
+   SDK 从 CDN 改成本地文件之后，它就是一个**本地脚本**，也进了这条链 ——
+   而它必须排在 db.js 前面（db.js 一加载就要用 window.WorkBuddyCloud）。 */
+const EXPECTED_ORDER = ['workbuddy-cloud-sdk.js', 'config.js', 'db.js', 'cloud.js', 'rules.js', 'store.js', 'data.js', 'app.js'];
 
 function checkB7() {
   const html = stripHtmlComments(readText('index.html'));
