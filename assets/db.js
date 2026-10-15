@@ -156,6 +156,13 @@
       return c.database
         .from(C.hot.table)
         .select('id, topic_date, rank, title, summary, hot_value, hot_text, url, source_key, source_name, fetched_at')
+        /* 【Day 28 修】先按日期倒序，再按 rank 正序。
+           ⚠️ 原来只写了 `.order('rank')` —— 而库里**每一天都有 rank=1**，
+           谁排第一由数据库自己决定，实测拿回来的是**最早那一天**的。
+           上层（cloud.js 的 fetchHotTopics）要的是「最新那天的头一行」，
+           只有补上这个日期排序，那个假设才成立。
+           ⚠️ 顺序不能反：日期是第一关键字，rank 只管同一天内部怎么排。 */
+        .order('topic_date', { ascending: false })
         .order('rank', { ascending: true })
         .limit(400);
     });

@@ -105,7 +105,19 @@
 
          ⚠️ 「今天是哪天」这件事**必须在这一层按浏览器本地时间算**，
          不能交给数据库 —— topic_date 是日期类型，让数据库判「今天」时区会错位。 */
-      var latest = String(all[0].topic_date || '').slice(0, 10);
+      /* 【Day 28 修】不赖后端排序，**自己从拿回来的行里算最大的那个日期**。
+         ⚠️ 原来写的是 `all[0].topic_date`，注释写「最新那一天」，但 all[0] 并不是 ——
+         查询是按 rank 排的（见 db.js 的 selectHotTopics），库里一有多天快照，
+         谁排第一就不确定了，实测拿到的是**最早那天**（页面因此显示 12 天前的榜单）。
+         ⚠️ 日期是 'YYYY-MM-DD' 纯文本，字典序就是时间序，直接比大小即可，
+         不用转成 Date（一转就又要操心时区）。
+         这一改跟 db.js 那条 `.order('topic_date')` 是**双保险**：
+         任一边以后被改坏，另一边还拦得住。 */
+      var latest = '';
+      all.forEach(function (r) {
+        var d = String(r.topic_date || '').slice(0, 10);
+        if (d > latest) latest = d;
+      });
       var rows = all.filter(function (r) {
         return String(r.topic_date || '').slice(0, 10) === latest;
       });
