@@ -37,9 +37,18 @@
 --       · contents —— 多一条 INSERT 策略（**没有** UPDATE / DELETE）
 --       · 两张表的 UPDATE / DELETE 依然全部关闭
 --
+--    ⚠️ **Day 27 更正**：上面那三行说的是 Day 18 那天的状态，**不是现在的状态**。
+--       Day 22 曾把 UPDATE / DELETE 也开出来（见本文件 Day 22 段），
+--       Day 27 又把三条写权限**全部收回**（见本文件末尾 Day 27 迁移段）。
+--       **现在两张表对客户端都是只读**（anon 只有 SELECT）。
+--       原文按 AGENTS 第 5 条留档不删 —— 但以末尾那一段为准。
+--
 -- ============================================================
 -- 【怎么用这个文件】
 --   它是一次性的建表脚本，可以在空库上原样重跑（全部带 IF NOT EXISTS / IF EXISTS）。
+--   ⚠️ Day 27 补一句：重跑之后**最终状态是「只读」**，因为文件末尾有一段
+--      Day 27 收权迁移，会把本文件中途开过的写权限再撤干净。
+--      所以「原样重跑」现在是安全的 —— 但**别把末尾那一段单独摘出去留着不跑**。
 --   跑法：**逐条执行**。云数据库的接口一次只接受一条语句，多句会报
 --   「cannot insert multiple commands into a prepared statement」。
 -- ============================================================
@@ -292,3 +301,52 @@ CREATE POLICY contents_delete_guard ON contents FOR DELETE TO anon, authenticate
 --    改完必须证明能用，不许只看 SQL 跑通了就当成了）。
 --    如果 GRANT 漏了或策略名字写错了，第 ①②③ 步都不会报错，
 --    但页面上会得到「没改成功」—— 那时候回头看这几条。
+
+
+-- ============================================================
+-- 【Day 27 迁移】把上面三道写权限的门重新关掉（★ 这一段是本文件的最终状态）
+-- ============================================================
+--
+-- 【为什么要有这一段】
+--   Day 22 在本文件里给 anon 开了 INSERT / UPDATE / DELETE（三份 GRANT ＋ 三条
+--   guard 策略），目的是让「内容库」那一列能在页面上增、改、删。
+--   Day 27 走「路线A」改主意了：页面**只读**，内容由运营侧直接写库。
+--   那天是在**云端**执行 SQL 撤的权限 —— 但**忘了回头同步这个脚本**。
+--
+--   ⚠️ 后果很具体：本文件开头写着「可以在空库上原样重跑」。
+--      谁重跑一遍，就等于把已经关上的门**重新打开**，
+--      而页面上看起来一切正常（读还是能读），不会有人发现。
+--      这是 Day 28 独立验收官挑出来的，原话是「谁重跑一遍就把关掉的门重新打开了」。
+--
+-- 【为什么用「追加」而不是回去删掉 Day 22 那几段】
+--   AGENTS.md 第 5 条：已定稿的文档只许追加和修正。
+--   Day 22 那几段是**历史事实**（那天确实这么开过），删掉就没有来历了。
+--   而 SQL 是顺序执行的：只要末尾这一段把权限收干净，
+--   不管从哪天的状态重跑，**跑完的最终状态都等于线上现状**。
+--
+-- 【跑完之后应该有 / 不应该有什么】
+--   · anon 在 contents 上：只有 SELECT（INSERT / UPDATE / DELETE 全部没有了）；
+--   · pg_policies 里 contents 只剩 contents_read_all 一条；
+--   · 页面上「内容库」照常能读、能筛选、能搜索 —— 那三样走的是 SELECT，不受影响；
+--   · 页面上**没有**任何新增 / 编辑 / 删除入口（Day 27 起就是这样）。
+--
+-- ⚠️ 顺序不能挪：这一段必须在 Day 22 那三段**之后**，因为它撤销的正是那三段开的东西。
+
+-- ① 先撤行级策略（策略留着、只收 GRANT 的话，看起来关上了，其实一开 GRANT 就复活）。
+DROP POLICY IF EXISTS contents_insert_guard ON contents;
+DROP POLICY IF EXISTS contents_update_guard ON contents;
+DROP POLICY IF EXISTS contents_delete_guard ON contents;
+
+-- ② 再撤表级权限（两道门一起关，缺一道都等于没关）。
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.contents FROM anon;
+
+-- ③ 校验（跑完自己看一眼，别只看「没报错」）：
+--   SELECT name, cmd FROM pg_policies WHERE tablename = 'contents' ORDER BY cmd;
+--     → 只应该有 contents_read_all(SELECT) 一条
+--   SELECT grantee, privilege_type FROM information_schema.role_table_grants
+--     WHERE table_name = 'contents' AND grantee = 'anon';
+--     → 只应该有 SELECT 一行
+--
+-- 📌 2026-10-21 核对：云端现状就是这样（anon 三张表各一个 SELECT，
+--    authenticated 在 contents 上也只剩 SELECT/REFERENCES/TRIGGER）——
+--    也就是说，**现在重跑本文件的结果 = 线上现状**，两边终于对上了。
