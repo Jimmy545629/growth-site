@@ -392,8 +392,8 @@ window.GROWTH_DATA = {
     {
       id: 'munger-usc-1994',
       title: '普世智慧：为什么「拿着一把锤子，看什么都是钉子」',
-      media: 'talk', dur: '约 50 分钟',
-      origin: '查理·芒格 1994 年在 USC 马歇尔商学院的演讲',
+      media: 'article', dur: '约 50 分钟',
+      origin: '查理·芒格 1994 年在 USC 马歇尔商学院的演讲（现存为文字稿，无可靠公开录像）',
       url: 'https://jamesclear.com/great-speeches/a-lesson-on-elementary-worldly-wisdom-by-charlie-munger',
       tag: '思维模型',
       summary: '他讲的「多元思维模型」不是让人什么都学一点，而是：手上要有好几把不同学科的工具，遇到问题时知道该拿哪一把。只有一把锤子的人，会把所有问题都看成钉子 —— 而且他自己察觉不到这一点。',
