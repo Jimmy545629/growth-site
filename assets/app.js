@@ -1477,6 +1477,13 @@
              根子就是拿来源表的字段去顶内容自己的字段 —— 这里反着来，各用各的。） */
       srcName: src.name || '',
       srcPlatform: src.platform || '',
+      /* 【2026-10-21 加】原文链接。
+         ⚠️ 这是「补了链接却没生效」的根子：库里 contents.url 已经 22/22 全填上了，
+            但这一层**从来没把 url 取出来**，于是 renderEntry 拿不到它，
+            页面上自然一个字都不显示 —— 数据是死的，得有人把它取出来。
+         ⚠️ 空字符串照原样往下传，渲染那边用 if (it.url) 挡住：
+            不留空壳、不印 undefined（跟 person / tag 同一条规矩）。 */
+      url: (r && r.url) ? String(r.url).replace(/^\s+|\s+$/g, '') : '',
       time: R.daysAgo(r && r.created_at)
     };
 
@@ -1767,6 +1774,29 @@
       add(ops, edit);
       add(ops, del);
       add(li, ops);
+    }
+
+    /* ---------- 原文链接（2026-10-21 加）----------
+       库里的 22 条内容现在都有真实出处（政策 → gov.cn / 书籍 → 豆瓣 /
+       演讲访谈 → 官方页或权威全文）。但这一块之前**一个字都没画**：
+       entryFromRow 没取 url、renderEntry 也没画 ——
+       结果是「数据补全了，页面上仍然看不见能点的原出处」，等于白补。
+
+       ⚠️ 没有 url 就不画（不印空壳、不印 undefined），跟 person / tag 同一条规矩。
+       ⚠️ rel="noopener noreferrer" 不能省：外链在 target=_blank 下
+          拿得到 window.opener，省了它等于把本站的窗口句柄交出去。 */
+    if (it.url) {
+      var linkRow = h('p', { class: 'entry-link-row' });
+      add(linkRow, h('a', {
+        class: 'entry-link',
+        href: it.url,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        'aria-label': D.entryLink.ariaPrefix + it.title,
+        title: D.entryLink.title,
+        text: D.entryLink.label
+      }));
+      add(body, linkRow);
     }
 
     add(li, body);
