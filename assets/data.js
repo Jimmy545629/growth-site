@@ -362,7 +362,7 @@ window.GROWTH_DATA = {
       title: '把生命中的点连起来',
       media: 'video', dur: '约 15 分钟',
       origin: '史蒂夫·乔布斯 2005 年斯坦福大学毕业典礼演讲',
-      url: '',
+      url: 'https://news.stanford.edu/2005/06/14/jobs-061505/',
       tag: '人生选择',
       summary: '这场演讲被引用了二十年，真正撑住它的是三个故事：退学之后去旁听书法课、被自己创办的公司开除、以及确诊癌症。三个故事其实在讲同一件事 —— 你在当下根本看不出某件事有什么用，只有回头看，那些点才连成一条线。',
       points: [
@@ -378,7 +378,7 @@ window.GROWTH_DATA = {
       title: '失败的益处',
       media: 'video', dur: '约 20 分钟',
       origin: 'J.K.罗琳 2008 年哈佛大学毕业典礼演讲',
-      url: '',
+      url: 'https://news.harvard.edu/gazette/story/2008/06/text-of-j-k-rowling-speech/',
       tag: '失败与韧性',
       summary: '她不讲「要坚持」，而是把两件常被混为一谈的事分开：贫穷是一种真实的限制，而失败不是 —— 失败只是把你身上那些不重要的东西剥掉，让你看清自己还剩什么。她也不把想象力说成「创造力」，而是「体谅别人处境的能力」。',
       points: [
@@ -394,7 +394,7 @@ window.GROWTH_DATA = {
       title: '普世智慧：为什么「拿着一把锤子，看什么都是钉子」',
       media: 'talk', dur: '约 50 分钟',
       origin: '查理·芒格 1994 年在 USC 马歇尔商学院的演讲',
-      url: '',
+      url: 'https://jamesclear.com/great-speeches/a-lesson-on-elementary-worldly-wisdom-by-charlie-munger',
       tag: '思维模型',
       summary: '他讲的「多元思维模型」不是让人什么都学一点，而是：手上要有好几把不同学科的工具，遇到问题时知道该拿哪一把。只有一把锤子的人，会把所有问题都看成钉子 —— 而且他自己察觉不到这一点。',
       points: [
@@ -410,7 +410,7 @@ window.GROWTH_DATA = {
       title: '为什么「能连续专注两小时」正在变成稀缺能力',
       media: 'article', dur: '约 9 分钟',
       origin: '书籍《深度工作》· 卡尔·纽波特',
-      url: '',
+      url: 'https://book.douban.com/subject/27056409/',
       tag: '专注力',
       summary: '这本书的论证其实很朴素：在一个人人都被打断的环境里，「能长时间不被打断地做一件事」本身就成了一种别人买不到的能力。剩下的问题是 —— 这种能力是练出来的，不是天生的，而大部分人的一天被切得太碎了。',
       points: [
@@ -425,8 +425,8 @@ window.GROWTH_DATA = {
       id: 'atomic-habits-identity',
       title: '从「我要减肥」到「我是个运动的人」：习惯的根在身份，不在意志力',
       media: 'article', dur: '约 8 分钟',
-      origin: '书籍《原子习惯》· 詹姆斯·克利尔',
-      url: '',
+      origin: '书籍《掌控习惯》（台版译名《原子习惯》）· 詹姆斯·克利尔',
+      url: 'https://book.douban.com/subject/34326931/',
       tag: '习惯养成',
       summary: '它把「养成习惯」拆成三层：结果、过程、身份。大多数人从「我要瘦十斤」出发，所以每次没达标就自我否定；更稳的做法是从「我是个什么样的人」出发，让每一次小动作都是在给这个身份投票。',
       points: [
@@ -442,7 +442,7 @@ window.GROWTH_DATA = {
       title: '效能优先于效率：知识工作者的第一课',
       media: 'article', dur: '约 8 分钟',
       origin: '书籍《卓有成效的管理者》· 彼得·德鲁克',
-      url: '',
+      url: 'https://book.douban.com/subject/1322025/',
       tag: '时间管理',
       summary: '德鲁克把「效率」和「效能」分开，是这本书最值钱的一刀：效率是把事情做对，效能是做对的事情。很多人卡住不是因为不够努力，而是把一件根本不该做的事做得非常漂亮。',
       points: [
@@ -458,7 +458,7 @@ window.GROWTH_DATA = {
       title: '专长与杠杆：为什么「努力」本身不值钱',
       media: 'podcast', dur: '约 45 分钟',
       origin: '《纳瓦尔宝典》· 纳瓦尔·拉维坎特（源自他的播客访谈整理）',
-      url: '',
+      url: 'https://book.douban.com/subject/35876121/',
       tag: '财富与杠杆',
       summary: '他的核心说法是：努力本身是可以被替代的，值钱的是「你独有的专长」加上「杠杆」。杠杆有几种 —— 人、资本、以及「代码和媒体」这种复制成本几乎为零的东西。最后一种对没有资源的人最友好，因为它不需要谁批准你。',
       points: [
@@ -473,8 +473,8 @@ window.GROWTH_DATA = {
       id: 'policy-ai-talent',
       title: '人工智能被列为战略性新兴产业：这条政策对在校生意味着什么',
       media: 'article', dur: '约 6 分钟',
-      origin: '公开政策文件',
-      url: '',
+      origin: '《新一代人工智能发展规划》（国务院 2017 年印发）',
+      url: 'https://www.gov.cn/gongbao/content/2017/content_5216427.htm',
       tag: '政策解读',
       summary: '政策把 AI 从「一个值得关注的行业」提升到了「基础设施」的位置。对还在读书的人来说，它影响的不是「要不要学 AI」，而是「会不会用 AI 做事」这件事，正在从加分项变成基础项 —— 就像当年的 Office。',
       points: [
