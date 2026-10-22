@@ -360,7 +360,7 @@ window.GROWTH_DATA = {
     {
       id: 'jobs-stanford-2005',
       title: '把生命中的点连起来',
-      media: 'video', dur: '约 15 分钟',
+      media: 'article', dur: '约 15 分钟',
       origin: '史蒂夫·乔布斯 2005 年斯坦福大学毕业典礼演讲',
       url: 'https://news.stanford.edu/2005/06/14/jobs-061505/',
       tag: '人生选择',
@@ -376,7 +376,7 @@ window.GROWTH_DATA = {
     {
       id: 'rowling-harvard-2008',
       title: '失败的益处',
-      media: 'video', dur: '约 20 分钟',
+      media: 'article', dur: '约 20 分钟',
       origin: 'J.K.罗琳 2008 年哈佛大学毕业典礼演讲',
       url: 'https://news.harvard.edu/gazette/story/2008/06/text-of-j-k-rowling-speech/',
       tag: '失败与韧性',
@@ -456,7 +456,7 @@ window.GROWTH_DATA = {
     {
       id: 'naval-leverage',
       title: '专长与杠杆：为什么「努力」本身不值钱',
-      media: 'podcast', dur: '约 45 分钟',
+      media: 'article', dur: '约 7 分钟',
       origin: '《纳瓦尔宝典》· 纳瓦尔·拉维坎特（源自他的播客访谈整理）',
       url: 'https://book.douban.com/subject/35876121/',
       tag: '财富与杠杆',
