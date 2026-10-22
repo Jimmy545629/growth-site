@@ -9,6 +9,8 @@
        node skills/pre-release-check/check.mjs --only A1,C1    # 只跑指定项
        node skills/pre-release-check/check.mjs --walk          # 强制走「目录遍历」降级通道
        node skills/pre-release-check/check.mjs --root <目录>    # 指定项目根
+       node skills/pre-release-check/check.mjs --online-base <url>   # 临时换线上地址（验 C1 用）
+       node skills/pre-release-check/check.mjs --shot <out.png>      # C1 顺手截一张图当证据
        node skills/pre-release-check/check.mjs --html <out.html> --html-title "标题"
                                                               # 把这份报告另存成一页网页（留档/截图用）
 
@@ -25,13 +27,17 @@
    ③ 失败必须指到「文件:行号 + 原文」。只说「有问题」等于没说，
       还得人去猜在哪。
 
-   ④ 零外部依赖、零子进程。
+   ④ 零外部依赖、零子进程（**只有 C1 一处破例**）。
       不 spawn 任何东西 —— 因为在受限环境里 spawn 会被挡（EBUSY），
       脚本就会假装「检查不了」。宁可自己多写几十行，也不能让检查项
       因为环境问题变成「未检查」。
       · 文件清单：能用 `git ls-files` 就用（最准）；用不了就退回
         「自己遍历目录 + 自己解析 .gitignore」。
       · 联网：用 Node 自带的 fetch（不调 curl）。
+      ⚠️ 唯一破例是 C1：它**必须**用真浏览器打开一次（本机 Edge）。
+        原因见 C1 那段的长注释 —— 一句话：Node 的 fetch 会被本机代理
+        骗出一个假 200，而「假 200」比「没检查」更危险。
+        破例的代价由 ①（三态）承担：浏览器起不来就标「未检查」，不冒充通过。
 
    退出码：有 FAIL → 1；只有 PASS/WARN → 0。（只要有一项红，就不算通过。）
    ============================================================================= */
@@ -39,6 +45,8 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { lookup as dnsLookup } from 'node:dns/promises';
 import path from 'node:path';
 
 /* ============================ 0. 运行参数 ============================ */
@@ -58,8 +66,11 @@ const ONLY = (argVal('--only') || '')
   .filter(Boolean);
 
 /* 线上地址：本项目发布后的固定域名（沿用旧产品名 source-board）。
-   换了域名只改这一行。 */
-const ONLINE_BASE = 'https://source-board.app.workbuddy.host/';
+   换了域名只改这一行。
+   `--online-base <url>` 只是为了「验 C1 真的会红」时临时换个地址，
+   平时不要带。 */
+const ONLINE_BASE = (argVal('--online-base') || 'https://source-board.app.workbuddy.host/');
+const SHOT_PATH = argVal('--shot');
 
 /* ============================ 1. 文件清单（含降级通道） ============================ */
 
@@ -545,24 +556,265 @@ async function fetchWithTimeout(url, ms = 25000) {
   return res;
 }
 
-/* C1 —— 线上地址还活着吗 */
-async function checkC1() {
-  if (NO_ONLINE) {
-    record('C1', 'C', '线上地址可访问', 'WARN', '本次用 --no-online 跳过了 —— **未检查**，不代表通过');
-    return;
+/* C1 —— 线上地址还活着吗：**用本机真浏览器打开一次，看它真的画出来了**。
+   -----------------------------------------------------------------------------
+   为什么不能用「Node 里 fetch 一下，看是不是 200」：
+   2026-10-13 出过事故 —— 本机的代理把这个域名转给了 127.0.0.1，
+   curl 拿到一个**假 200**，检查项于是打了绿勾，而线上当时其实是坏的。
+   「假绿」比「没检查」更危险：它让人不再去看。
+   真浏览器打开能多看见好几层 Node 拿不到的东西：
+     · 页面**真的执行了 JS** 吗（骨架在、内容是空的，规则层完全测不出来）；
+     · 真的连到了线上那台机器吗（连接的 IP、TLS 证书签发者）；
+     · 有没有未捕获的 JS 异常（Day 17 那个「线上整页 JS 不执行」就属于这类）。
+   判据（任何一条不满足即 FAIL）：
+     ① HTTP 200，且最终地址没被跳到别处；
+     ② 连到的 IP 不是本机地址（127.x / ::1）；
+     ③ 标签页标题是本项目的标题；
+     ④ 骨架**由 JS 画出来**了：导航至少 3 个、统计卡至少 3 张、语录卡有字；
+     ⑤ 没有未捕获的 JS 异常。
+   拿不到（找不到 Playwright / 起不了 Edge）→ WARN「未检查」，
+   **绝不退回去用 fetch 的 200 冒充通过**。
+   ----------------------------------------------------------------------------- */
+const C1_NAME = '线上地址可访问（真浏览器）';
+/* ⚠️ 用「包含」而不是「全等」：app.js 会按当前视图改标题，
+   真实标题是「今日 · 大学生成长网站」/「内容库 · 大学生成长网站」这种。
+   第一条就是全等写法，一跑就误报（2026-10-22 实测）。 */
+const EXPECT_TITLE = '大学生成长网站';
+const C1_GOTO_MS = 45000;                // 首次导航上限（含 DNS + TLS）
+const C1_RENDER_MS = 15000;              // 等 JS 把骨架画出来
+
+const oneLine = (e) => String((e && e.message) || e || '')
+  .replace(/\s+/g, ' ').trim().slice(0, 220);
+
+/** 本机地址：127.x / ::1 / 0.0.0.0 —— 线上域名绝不该解析到这儿 */
+function isLoopback(ip) {
+  if (!ip) return false;
+  if (ip === '::1' || ip === '0.0.0.0' || ip === '::') return true;
+  if (/^127\./.test(ip)) return true;
+  if (/^::ffff:/i.test(ip)) return isLoopback(ip.replace(/^::ffff:/i, ''));
+  if (/^0\./.test(ip)) return true;
+  return false;
+}
+
+/** 内网地址：10/8、172.16–31、192.168、169.254、fc00::/7 —— 只记一笔，不直接判红 */
+function isPrivateIp(ip) {
+  if (!ip) return false;
+  if (isLoopback(ip)) return true;
+  if (/^::ffff:/i.test(ip)) return isPrivateIp(ip.replace(/^::ffff:/i, ''));
+  if (/^f[cd]/i.test(ip)) return true;
+  const m = ip.match(/^(\d+)\.(\d+)\./);
+  if (!m) return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  if (a === 10) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 169 && b === 254) return true;
+  return false;
+}
+
+/* 按目录去 require Playwright，而不是写 `import 'playwright'`：
+   这台机器上它装在 WorkBuddy 的 node 工作区里（不在项目 node_modules 下），
+   而 ESM 的 import **不认 NODE_PATH**，直接 import 会报「找不到模块」。
+   createRequire 走的是老式（CommonJS）解析规则，认目录，所以能找着。 */
+function loadPlaywright() {
+  const bases = [
+    process.env.PRE_RELEASE_PW_HOME,                          // 手动指定：node_modules 的**上级**目录
+    ROOT,                                                     // 项目自带（本项目按约束 C2 不该有）
+    'C:/Users/33386/.workbuddy/binaries/node/workspace',       // Jimmy 机器上装的那个
+  ].filter(Boolean);
+  for (const base of bases) {
+    try {
+      return createRequire(path.join(base, '__pw_resolve__.js'))('playwright');
+    } catch {
+      /* 换下一个 */
+    }
   }
   try {
-    const res = await fetchWithTimeout(ONLINE_BASE);
-    if (res.status === 200) {
-      record('C1', 'C', '线上地址可访问', 'PASS', `HTTP 200 — ${ONLINE_BASE}`);
-    } else {
-      record('C1', 'C', '线上地址可访问', 'FAIL', `HTTP ${res.status}（不是 200）`,
-        [{ file: ONLINE_BASE, line: 0, what: 'HTTP', text: String(res.status) }]);
-    }
-  } catch (e) {
-    record('C1', 'C', '线上地址可访问', 'WARN', `没连上（${e.name}）—— **未检查**`);
+    return createRequire(import.meta.url)('playwright');
+  } catch {
+    return null;
   }
 }
+
+async function checkC1() {
+  if (NO_ONLINE) {
+    record('C1', 'C', C1_NAME, 'WARN', '本次用 --no-online 跳过了 —— **未检查**，不代表通过');
+    return;
+  }
+
+  let host = '';
+  try { host = new URL(ONLINE_BASE).hostname; } catch { /* 地址写错，交给下面浏览器报 */ }
+
+  const facts = [];   // 「看见了什么」：通过时也打印出来，便于以后核对
+  const bad = [];     // 命中即 FAIL
+  const soft = [];    // 只记一笔，不判红
+
+  /* ---- 第 1 步：DNS 直连解析（不经过代理，Node 自己问） ---- */
+  let dnsIps = [];
+  try {
+    const addrs = await dnsLookup(host, { all: true });
+    dnsIps = addrs.map((a) => a.address);
+    facts.push(`DNS 直连解析：${dnsIps.join(', ') || '（空）'}`);
+    const loop = dnsIps.filter(isLoopback);
+    if (loop.length) {
+      bad.push(`DNS 把 ${host} 解析到本机地址 ${loop.join(', ')} —— 这是本机代理 / hosts 在劫持，打开的并不是线上站点`);
+    } else {
+      const priv = dnsIps.filter(isPrivateIp);
+      if (priv.length) soft.push(`DNS 解析到内网地址 ${priv.join(', ')}（正常 DNS 不该这样，值得核对）`);
+    }
+  } catch (e) {
+    soft.push(`DNS 直连解析没成功（${e.code || e.name || e}）`);
+  }
+
+  /* ---- 第 2 步：真浏览器打开 ---- */
+  const pw = loadPlaywright();
+  if (!pw) {
+    record('C1', 'C', C1_NAME, 'WARN',
+      '本机找不到 Playwright —— 真浏览器通道用不了，**未检查**（不拿 fetch 的 200 冒充通过）');
+    return;
+  }
+
+  let browser = null;
+  try {
+    /* channel: 'msedge' = 用本机装好的 Microsoft Edge（不用另下 Chromium）。
+       headless 只是「不弹窗口」，引擎、网络栈、JS 全是真的。 */
+    browser = await pw.chromium.launch({ channel: 'msedge', headless: true });
+  } catch (e) {
+    record('C1', 'C', C1_NAME, 'WARN',
+      `启动本机 Edge 失败（${oneLine(e)}）—— 没能用真浏览器打开，**未检查**`);
+    return;
+  }
+
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'zh-CN' });
+    const page = await ctx.newPage();
+
+    const pageErrors = [];
+    const consoleErrors = [];
+    const failedReq = [];
+    page.on('pageerror', (e) => pageErrors.push(oneLine(e)));
+    page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(oneLine(m.text())); });
+    page.on('requestfailed', (r) => {
+      const name = r.url().split('/').pop() || r.url();
+      failedReq.push(`${name}（${(r.failure() || {}).errorText || '失败'}）`);
+    });
+
+    /* ① 导航。打不开就直接出一个结论 —— 后面那 5 条判据全都会跟着报错，
+       刷一屏「同理的 7 条」还不如把真正的原因说一遍。 */
+    let resp = null;
+    const t0 = Date.now();
+    let gotoErr = null;
+    try {
+      resp = await page.goto(ONLINE_BASE, { waitUntil: 'domcontentloaded', timeout: C1_GOTO_MS });
+    } catch (e) {
+      gotoErr = e;
+    }
+    const ms = Date.now() - t0;
+
+    if (!resp) {
+      record('C1', 'C', C1_NAME, 'FAIL',
+        `Edge 根本打不开 ${ONLINE_BASE}`,
+        [{ file: ONLINE_BASE, line: 0, what: '真浏览器', text: oneLine(gotoErr) }],
+        [
+          { file: '真浏览器所见', text: `等了 ${ms} ms 也没打开（Edge 连不上 / 域名不存在 / 被拦）` },
+          ...facts.map((t) => ({ file: '真浏览器所见', text: t })),
+          ...soft.map((t) => ({ file: '备注', text: t })),
+        ]);
+      return;
+    }
+
+    const status = resp.status();
+    const finalUrl = page.url();
+    facts.push(`HTTP ${status} · 首屏 ${ms} ms`);
+    if (status !== 200) bad.push(`HTTP ${status}（不是 200）`);
+    if (finalUrl !== ONLINE_BASE && !finalUrl.startsWith(ONLINE_BASE)) {
+      bad.push(`地址被跳走了：打开的是 ${finalUrl}`);
+    }
+    /* 连到的是哪台机器 —— 这一条专门用来抓「本地代理冒充线上」 */
+    try {
+      const addr = await resp.serverAddr();
+      if (addr && addr.ipAddress) {
+        facts.push(`实际连到 ${addr.ipAddress}:${addr.port}`);
+        if (isLoopback(addr.ipAddress)) {
+          bad.push(`浏览器实际连到本机 ${addr.ipAddress} —— 打开的是本机上的东西，不是线上站点`);
+        }
+      }
+    } catch { /* 老版本 Playwright 没有这个方法，跳过 */ }
+    /* TLS 证书是谁签的 —— 被中间人接管时会冒出一张本地自签证书 */
+    try {
+      const sec = await resp.securityDetails();
+      if (sec && sec.issuer) facts.push(`TLS 证书签发者：${sec.issuer}`);
+    } catch { /* 同上 */ }
+
+    /* ② 等 JS 把骨架画出来（这一步就是「规则层测不出来」的那层） */
+    let drew = true;
+    try {
+      await page.waitForSelector('#tabs a', { timeout: C1_RENDER_MS });
+    } catch {
+      drew = false;
+    }
+    await page.waitForTimeout(600);
+
+    const dom = await page.evaluate(() => {
+      const txt = (sel) => {
+        const el = document.querySelector(sel);
+        return el ? (el.innerText || '').trim() : '';
+      };
+      return {
+        title: document.title,
+        tabs: document.querySelectorAll('#tabs a').length,
+        stats: document.querySelectorAll('#stats > *').length,
+        quoteLen: txt('#quote-card').length,
+        bodyLen: (document.body.innerText || '').trim().length,
+      };
+    });
+
+    if (!drew) bad.push(`等 ${C1_RENDER_MS / 1000} 秒也没等到导航画出来 —— JS 大概率没执行（Day 17 那个坑）`);
+
+    facts.push(`标题「${dom.title || '（空）'}」· 导航 ${dom.tabs} 个 · 统计卡 ${dom.stats} 张 · 语录 ${dom.quoteLen} 字 · 正文 ${dom.bodyLen} 字`);
+
+    if (!dom.title.includes(EXPECT_TITLE)) {
+      bad.push(`标签页标题是「${dom.title || '（空）'}」，里面没有「${EXPECT_TITLE}」—— 打开的不是这个站`);
+    }
+    if (dom.tabs < 3) bad.push(`导航只画出 ${dom.tabs} 个（应该是 3 个）—— 页面骨架没画全`);
+    if (dom.stats < 3) bad.push(`统计卡只画出 ${dom.stats} 张（应该是 3 张）—— 首页没渲染`);
+    if (dom.quoteLen < 10) bad.push(`今日语录是空的（${dom.quoteLen} 字）—— 数据没到位`);
+    if (dom.bodyLen < 300) bad.push(`整页只有 ${dom.bodyLen} 字 —— 基本是空壳`);
+
+    if (pageErrors.length) bad.push(`有未捕获的 JS 异常 ${pageErrors.length} 条：${pageErrors[0]}`);
+    if (consoleErrors.length) soft.push(`控制台 error ${consoleErrors.length} 条（第一条：${consoleErrors[0]}）`);
+    if (failedReq.length) soft.push(`有请求失败 ${failedReq.length} 条（第一条：${failedReq[0]}）`);
+
+    /* ③ 顺手留张图当证据（--shot 才截） */
+    if (SHOT_PATH) {
+      try {
+        await page.screenshot({ path: SHOT_PATH, fullPage: false });
+        facts.push(`已截图：${SHOT_PATH}`);
+      } catch (e) {
+        soft.push(`截图失败（${oneLine(e)}）`);
+      }
+    }
+
+    /* ④ 出结论 */
+    const notes = [...facts.map((t) => ({ file: '真浏览器所见', text: t }))]
+      .concat(soft.map((t) => ({ file: '备注', text: t })));
+
+    if (bad.length) {
+      record('C1', 'C', C1_NAME, 'FAIL',
+        `Edge 真打开的结论是「不行」—— ${bad.length} 处问题`,
+        bad.map((t) => ({ file: ONLINE_BASE, line: 0, what: '真浏览器', text: t })),
+        notes);
+    } else {
+      record('C1', 'C', C1_NAME, 'PASS',
+        `Edge 真打开过 — HTTP 200 · ${ms} ms · 画出 ${dom.tabs} 个导航 / ${dom.stats} 张统计卡`,
+        [], notes);
+    }
+  } finally {
+    try { await browser.close(); } catch { /* 关不掉也不影响结论 */ }
+  }
+}
+
 
 /* C2 —— 线上跑的是不是本地这份代码（逐文件比 md5） */
 function localCodeFiles() {
@@ -615,7 +867,8 @@ async function checkC2() {
   }
 
   if (netFail === files.length) {
-    record('C2', 'C', '线上与本地代码一致', 'WARN', '全部取不到 —— 网络不通，**未检查**');
+    record('C2', 'C', '线上与本地代码一致', 'WARN',
+      '全部取不到 —— 要么网络不通，要么线上地址本身已失效（先看 C1 的结论）—— **未检查**');
   } else if (diff.length) {
     record('C2', 'C', '线上与本地代码一致', 'FAIL',
       `${okCount}/${files.length} 一致，${diff.length} 个对不上（线上还是旧版？没发布？）`, diff);
